@@ -114,6 +114,32 @@ CREATE TABLE IF NOT EXISTS audit_log (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Translation freshness (publication stays in site_publish_state / site_versions).
+CREATE TABLE IF NOT EXISTS translation_source_revisions (
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  source_locale TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (entity_type, entity_id, source_locale)
+);
+
+CREATE TABLE IF NOT EXISTS translation_status (
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  locale TEXT NOT NULL,
+  freshness_status TEXT NOT NULL
+    CHECK (freshness_status IN ('missing', 'current', 'outdated')),
+  review_status TEXT NOT NULL DEFAULT 'normal'
+    CHECK (review_status IN ('normal', 'acknowledged')),
+  source_revision INTEGER NOT NULL DEFAULT 0,
+  translated_from_revision INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  acknowledged_at TEXT,
+  acknowledged_by INTEGER REFERENCES admin_users(id) ON DELETE SET NULL,
+  PRIMARY KEY (entity_type, entity_id, locale)
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_services_sort ON services(sort_order);
 CREATE INDEX IF NOT EXISTS idx_service_translations_locale ON service_translations(locale);
@@ -127,6 +153,12 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
 CREATE INDEX IF NOT EXISTS idx_audit_log_actor_created ON audit_log(actor_user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_audit_log_locale ON audit_log(locale);
+CREATE INDEX IF NOT EXISTS idx_translation_status_locale ON translation_status(locale);
+CREATE INDEX IF NOT EXISTS idx_translation_status_freshness ON translation_status(freshness_status);
+CREATE INDEX IF NOT EXISTS idx_translation_status_entity_type ON translation_status(entity_type);
+CREATE INDEX IF NOT EXISTS idx_translation_status_review ON translation_status(review_status);
+CREATE INDEX IF NOT EXISTS idx_translation_status_freshness_locale ON translation_status(freshness_status, locale);
+CREATE INDEX IF NOT EXISTS idx_translation_source_revisions_locale ON translation_source_revisions(source_locale);
 
 INSERT OR IGNORE INTO site_publish_state (locale, published_version_id, previous_version_id, publishing)
 VALUES ('he', NULL, NULL, 0);

@@ -19,7 +19,8 @@
     "test:audit": "node scripts/run-audit-tests.mjs",
     "test:ssr": "node scripts/acceptance-ssr.mjs",
     "test:admin-i18n": "node scripts/test-admin-i18n.mjs",
-    "test:admin-i18n:api": "node scripts/run-admin-i18n-api.mjs"
+    "test:admin-i18n:api": "node scripts/run-admin-i18n-api.mjs",
+    "test:translation-status": "node scripts/run-translation-status-tests.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.40.0"

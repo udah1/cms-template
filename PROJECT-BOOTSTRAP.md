@@ -298,6 +298,29 @@ ALLOW_DEMO_REMOTE_SEED=1 npm run db:seed:remote
 
 Rollback אינו מוחק מדיה מ־R2. מחיקת מדיה צריכה להיות פעולה מפורשת ומתועדת.
 
+## Translation Status
+
+מעקב freshness של תרגומים נמצא ב־`migrations/006_translation_status.sql` (schema בלבד) ומשולב גם ב־`schema.sql`.
+
+- שפת המקור היא `I18N.defaultLocale` ב־`functions/_shared/i18n.js` - לא מקובעת ב־migration וב־seed.
+- `seed.sql` רק מנקה את טבלאות ה־translation; השורות נוצרות ב־runtime דרך `ensureAllTranslationStatusRows()` לפי `defaultLocale` / `locales`.
+- שמירת Draft בשפת מקור: **optimistic locking** - CAS bump + fan-out סטטוסים קודם, ורק אז כתיבת התוכן (`commitDraftWritesWithSourceBumps`). `expectedSourceRevision` ישן → 409 בלי לדרוס תוכן חדש יותר (לא last-write-wins).
+- UI תרגומים מופיע באדמין רק כש־`locales.length > 1`.
+- `system_messages`: נתמכים ב־payload ובמעקב freshness; מסך עריכה באדמין אינו חלק מ־v1 (chrome נשאר ב־`ui-i18n.js`).
+- בדיקה מקומית מבודדת: `npm run test:translation-status` (persist: `.wrangler/state-translation-test`; לא מול `.wrangler/state` המשותף). ה־runner מעביר `I18N_LOCALES_OVERRIDE` כ־binding לשרת הבדיקה בלבד - **בלי** לשכתב את `i18n.js` על הדיסק (כדי לא לזהם `npm run dev` חי).
+
+### Template מול Playground (הבדלים מכוונים)
+
+| פריט | Template | Playground |
+|------|----------|------------|
+| `locales` (קוד) | `['he']` | `['he','en']` |
+| בדיקות translation | מריצות זמנית גם `es` | מריצות זמנית גם `es` (לא נשאר ב־i18n) |
+| `seed.sql` | תוכן he בלבד | תוכן he+en |
+| D1 name | `cms-template` | `cms-template-pg-multilingual` |
+| פורט בדיקת translation | 8798 | 8797 |
+| פורט `npm run dev` | 8788 | 3788 |
+| קוד translations/API | זהה | זהה (ייחוס) |
+
 ## Audit Log
 
 Audit Log נמצא ב־`migrations/004_audit_log.sql` ומשולב גם ב־`schema.sql`.
@@ -320,6 +343,7 @@ Audit Log נמצא ב־`migrations/004_audit_log.sql` ומשולב גם ב־`sch
 npm run test:acceptance
 npm run test:audit
 npm run test:ssr
+npm run test:translation-status
 ```
 
 הבדיקות משנות את ה־D1 המקומי דרך Draft, Publish, Rollback ו־throttle. אין להריץ אותן מול Database משותף או Production.

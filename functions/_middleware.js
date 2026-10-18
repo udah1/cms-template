@@ -5,6 +5,7 @@ import {
   validatePreviewToken,
 } from './_shared/publish.js';
 import { buildJsonLd, buildMeta, resolveSiteOrigin } from './_shared/seo.js';
+import { bindI18nRuntimeEnv } from './_shared/i18n.js';
 import {
   PUBLIC_SSR_PATHS,
   buildFallbackHtml,
@@ -104,6 +105,7 @@ async function renderNotFoundPage(request, env) {
 
 export async function onRequest(context) {
   const { request, env, next } = context;
+  bindI18nRuntimeEnv(env);
   const url = new URL(request.url);
 
   // Only intercept navigations / HTML page GETs for known public routes.

@@ -33,6 +33,7 @@
         <nav class="tabs" data-i18n-aria="nav.tabsAria" aria-label="ניווט ניהול">
           <button type="button" class="tab active" data-tab="content" data-i18n="tab.content">תוכן</button>
           <button type="button" class="tab" data-tab="portfolio" data-i18n="tab.portfolio">תיק עבודות</button>
+          <button type="button" class="tab" data-tab="translations" data-i18n="tab.translations" id="translationsTabBtn" hidden>תרגומים</button>
           <button type="button" class="tab" data-tab="audit" data-i18n="tab.audit">היסטוריית שינויים</button>
           <button type="button" class="tab" data-tab="password" data-i18n="tab.password">סיסמה</button>
         </nav>
@@ -70,6 +71,17 @@
         <p id="publishMessage" class="status" hidden></p>
       </section>
 
+      <aside id="translationBanner" class="translation-banner" hidden role="status">
+        <div class="translation-banner__body">
+          <p id="translationBannerText" class="translation-banner__text"></p>
+          <ul id="translationBannerList" class="translation-banner__list"></ul>
+        </div>
+        <div class="translation-banner__actions">
+          <button type="button" id="translationBannerOpen" class="btn btn-ghost" data-i18n="translations.openPanel">עבור לתרגומים</button>
+          <button type="button" id="translationBannerDismiss" class="btn btn-ghost" data-i18n="translations.dismissBanner">סגור</button>
+        </div>
+      </aside>
+
       <main>
         <section id="tab-content" class="panel">
           <div class="panel-head">
@@ -96,6 +108,16 @@
           <p class="meta" data-i18n="portfolio.hint">העלאה מרובה לתמונות בלבד - כל קובץ הופך לפריט נפרד. סרטונים: פריט חדש, אחד בכל פעם.</p>
           <p id="portfolioStatus" class="status" hidden></p>
           <div id="portfolioList" class="stack"></div>
+        </section>
+
+        <section id="tab-translations" class="panel hidden">
+          <div class="panel-head">
+            <h2 data-i18n="translations.heading">Translations needing attention</h2>
+            <button type="button" id="translationsRefreshBtn" class="btn btn-ghost" data-i18n="translations.refresh">רענון</button>
+          </div>
+          <p class="meta" data-i18n="translations.hint">תרגומים חסרים או שאינם מעודכנים מול שפת המקור. Acknowledge מסמן שראיתם את האזהרה בלי לעדכן את התרגום.</p>
+          <p id="translationsStatus" class="status" hidden></p>
+          <div id="translationsList" class="stack"></div>
         </section>
 
         <section id="tab-audit" class="panel hidden">

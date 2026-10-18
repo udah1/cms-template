@@ -15,11 +15,62 @@ const LOCALE_RE = /^[a-z]{2,3}(?:-[A-Z][a-zA-Z]{1,7})?$/;
 /** Query params safe to keep on locale redirects / switcher. */
 export const REDIRECT_QUERY_ALLOWLIST = new Set(['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']);
 
-export function isMultilingual(config = I18N) {
+/** Set from Workers `env` (wrangler --var) at request start - see bindI18nRuntimeEnv. */
+let runtimeLocalesOverride = null;
+let runtimeDefaultLocaleOverride = null;
+
+/**
+ * Call once per request from middleware/API with context.env so isolated tests can
+ * pass I18N_LOCALES_OVERRIDE via `wrangler pages dev --var` without rewriting i18n.js.
+ */
+export function bindI18nRuntimeEnv(env) {
+  const raw = env && env.I18N_LOCALES_OVERRIDE != null ? String(env.I18N_LOCALES_OVERRIDE).trim() : '';
+  runtimeLocalesOverride = raw || null;
+  const d =
+    env && env.I18N_DEFAULT_LOCALE_OVERRIDE != null
+      ? String(env.I18N_DEFAULT_LOCALE_OVERRIDE).trim()
+      : '';
+  runtimeDefaultLocaleOverride = d || null;
+}
+
+/**
+ * Active config. Override sources (first wins):
+ * 1) bindI18nRuntimeEnv / Workers env (test --var)
+ * 2) process.env (Node-side scripts only)
+ * Separators: comma, plus, or pipe (he,en,es / he+en+es / he|en|es).
+ */
+export function getActiveI18n() {
+  const fromProcess =
+    typeof process !== 'undefined' && process.env && process.env.I18N_LOCALES_OVERRIDE
+      ? String(process.env.I18N_LOCALES_OVERRIDE)
+      : '';
+  const raw = (runtimeLocalesOverride || fromProcess || '').trim();
+  if (!raw) return I18N;
+  const locales = [];
+  const seen = new Set();
+  for (const part of raw.split(/[,+|]/)) {
+    const locale = normalizeLocale(part.trim());
+    if (!locale || seen.has(locale)) continue;
+    seen.add(locale);
+    locales.push(locale);
+  }
+  if (!locales.length) return I18N;
+  const defaultFromProcess =
+    typeof process !== 'undefined' && process.env && process.env.I18N_DEFAULT_LOCALE_OVERRIDE
+      ? normalizeLocale(process.env.I18N_DEFAULT_LOCALE_OVERRIDE)
+      : null;
+  const defaultOverride =
+    normalizeLocale(runtimeDefaultLocaleOverride) || defaultFromProcess;
+  const defaultLocale =
+    (defaultOverride && locales.includes(defaultOverride) && defaultOverride) || locales[0];
+  return { ...I18N, defaultLocale, locales };
+}
+
+export function isMultilingual(config = getActiveI18n()) {
   return (config.locales || []).length > 1;
 }
 
-export function isEnabled(config = I18N) {
+export function isEnabled(config = getActiveI18n()) {
   return isMultilingual(config);
 }
 
@@ -41,11 +92,11 @@ export function normalizeLocale(value) {
   return LOCALE_RE.test(out) ? out : null;
 }
 
-export function getDefaultLocale(config = I18N) {
+export function getDefaultLocale(config = getActiveI18n()) {
   return normalizeLocale(config.defaultLocale) || 'he';
 }
 
-export function getLocales(config = I18N) {
+export function getLocales(config = getActiveI18n()) {
   const list = Array.isArray(config.locales) ? config.locales : [];
   const normalized = [];
   const seen = new Set();
@@ -58,7 +109,7 @@ export function getLocales(config = I18N) {
   return normalized;
 }
 
-export function validateI18n(config = I18N) {
+export function validateI18n(config = getActiveI18n()) {
   const defaultLocale = normalizeLocale(config?.defaultLocale);
   const locales = getLocales(config);
 
@@ -100,7 +151,7 @@ export function validateI18n(config = I18N) {
 }
 
 /** Strict: returns locale only if enabled; otherwise null (no silent fallback). */
-export function matchEnabledLocale(requested, config = I18N) {
+export function matchEnabledLocale(requested, config = getActiveI18n()) {
   const validated = validateI18n(config);
   const locale = normalizeLocale(requested);
   if (locale && validated.locales.includes(locale)) return locale;
@@ -108,7 +159,7 @@ export function matchEnabledLocale(requested, config = I18N) {
 }
 
 /** Soft resolve for Stage-0 callers that need a default. */
-export function resolveLocale(requested, config = I18N) {
+export function resolveLocale(requested, config = getActiveI18n()) {
   return matchEnabledLocale(requested, config) || getDefaultLocale(config);
 }
 

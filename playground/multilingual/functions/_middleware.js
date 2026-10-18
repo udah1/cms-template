@@ -1,5 +1,6 @@
 import { getPublishedPayload } from './_shared/content.js';
 import {
+  bindI18nRuntimeEnv,
   filterAllowedSearchParams,
   getDefaultLocale,
   getLocales,
@@ -128,6 +129,7 @@ async function renderNotFoundPage(request, env, locale = getDefaultLocale()) {
 
 export async function onRequest(context) {
   const { request, env, next } = context;
+  bindI18nRuntimeEnv(env);
   const url = new URL(request.url);
 
   if (request.method !== 'GET' && request.method !== 'HEAD') {

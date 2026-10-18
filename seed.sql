@@ -6,6 +6,8 @@ DELETE FROM preview_tokens;
 DELETE FROM sessions;
 UPDATE site_publish_state SET published_version_id = NULL, previous_version_id = NULL, publishing = 0, updated_at = datetime('now') WHERE locale = 'he';
 DELETE FROM site_versions;
+DELETE FROM translation_status;
+DELETE FROM translation_source_revisions;
 DELETE FROM admin_users;
 DELETE FROM site_content;
 DELETE FROM service_translations;
@@ -65,3 +67,8 @@ INSERT INTO portfolio_item_translations (portfolio_item_id, locale, title, categ
   (1, 'he', 'פרויקט לדוגמה 1', 'כללי', '["כללי"]', 'תמונה לדוגמה 1'),
   (2, 'he', 'פרויקט לדוגמה 2', 'פרויקטים', '["פרויקטים"]', 'תמונה לדוגמה 2'),
   (3, 'he', 'פרויקט לדוגמה 3', 'גלריה', '["גלריה"]', 'תמונה לדוגמה 3');
+
+-- Translation freshness rows are NOT seeded here (no locale hardcoding).
+-- ensureAllTranslationStatusRows() creates revision/status rows from
+-- I18N.defaultLocale + getLocales() on first Admin translations/content access.
+-- DELETE above keeps db:reset clean.

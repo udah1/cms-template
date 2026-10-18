@@ -241,7 +241,7 @@ Payload מפורסם חייב להיות snapshot מלא ומבודד של local
 
 יש להפריד בין שני סוגי הודעות:
 - Admin chrome קבוע — ניווט, כפתורים, labels ו־ARIA של ממשק הניהול — מנוהל בקבצי UI i18n של הקוד, ולא כתוכן עסקי ב־DB.
-- הודעות אתר הניתנות לעריכה — הודעות הצלחה/שגיאה, labels עסקיים, CTA וטקסטים שמנהל האתר צריך לשנות — מנוהלות ב־CMS כ־`system_messages` locale-aware, למשל:
+- הודעות אתר הניתנות לעריכה — הודעות הצלחה/שגיאה, labels עסקיים, CTA וטקסטים שמנהל האתר צריך לשנות — מיועדות ל־`system_messages` locale-aware:
 
 ```text
 system_messages
@@ -249,6 +249,8 @@ system_messages
   locale
   value
 ```
+
+ב־v1 הנוכחי: הטבלה, ה־Published Payload ומעקב freshness קיימים; **אין** מסך/endpoint Admin לעריכת `system_messages`. כשיוסיפו עורך - יש לחבר אותו לאותו מסלול preflight → write → bump/mark כמו `site_content`. עד אז chrome נשאר ב־`ui-i18n.js` בלבד.
 
 ב־single-locale התשתית קיימת אך Admin מציג רק את שפת ברירת המחדל, ללא מסך ניהול תרגומים.
 

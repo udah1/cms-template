@@ -19,7 +19,8 @@
     "test:admin-i18n": "node scripts/test-admin-i18n.mjs",
     "test:admin-i18n:api": "node scripts/run-admin-i18n-api.mjs",
     "db:migrate:locale-ready": "node scripts/migrate-005-locale-ready.mjs",
-    "test:migrate-005": "node scripts/test-migrate-005.mjs"
+    "test:migrate-005": "node scripts/test-migrate-005.mjs",
+    "test:translation-status": "node scripts/run-translation-status-tests.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.40.0"

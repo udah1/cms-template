@@ -39,6 +39,9 @@ const STORAGE_CONTENT = 'cmsAdmin.contentLocale';
 const STORAGE_ADMIN_LOCKED = 'cmsAdmin.adminLocaleLocked';
 
 let siteLocales = [UI_DEFAULT_LOCALE];
+let sourceRevisions = {};
+let needingAttention = [];
+let bannerDismissed = false;
 let siteDefaultLocale = UI_DEFAULT_LOCALE;
 let adminLocale = UI_DEFAULT_LOCALE;
 let contentLocale = UI_DEFAULT_LOCALE;
@@ -150,6 +153,112 @@ function syncLocalePickers() {
   }
 }
 
+function syncTranslationsUi() {
+  const tabBtn = document.getElementById('translationsTabBtn');
+  const multi = isMultilingualUi();
+  if (tabBtn) tabBtn.hidden = !multi;
+  if (!multi) {
+    const banner = document.getElementById('translationBanner');
+    if (banner) banner.hidden = true;
+    return;
+  }
+  renderTranslationBanner();
+}
+
+function localeLabel(loc) {
+  return t(adminLocale, `locale.${loc}`) || loc;
+}
+
+function renderTranslationBanner() {
+  const banner = document.getElementById('translationBanner');
+  if (!banner) return;
+  if (!isMultilingualUi() || bannerDismissed || !needingAttention.length) {
+    banner.hidden = true;
+    return;
+  }
+  const locales = [...new Set(needingAttention.map((i) => i.locale))];
+  const text = document.getElementById('translationBannerText');
+  const list = document.getElementById('translationBannerList');
+  if (text) {
+    text.textContent = tt('translations.banner', {
+      source: localeLabel(siteDefaultLocale),
+      locales: locales.map(localeLabel).join(', '),
+    });
+  }
+  if (list) {
+    list.innerHTML = needingAttention
+      .slice(0, 8)
+      .map((item) => {
+        const label = `${item.entityType}:${item.entityId}`;
+        const status = tt(`translations.freshness.${item.freshnessStatus}`) || item.displayStatus;
+        return `<li>${escapeHtml(label)} - ${escapeHtml(localeLabel(item.locale))} - ${escapeHtml(status)}</li>`;
+      })
+      .join('');
+  }
+  banner.hidden = false;
+}
+
+async function loadTranslationsPanel() {
+  const status = document.getElementById('translationsStatus');
+  const list = document.getElementById('translationsList');
+  if (!isMultilingualUi()) {
+    if (list) list.innerHTML = '';
+    return;
+  }
+  try {
+    const data = await api('/api/admin/translations/status?needing_attention=1&limit=100');
+    const items = data.items || [];
+    needingAttention = items.filter(
+      (i) =>
+        i.freshnessStatus === 'missing' ||
+        (i.freshnessStatus === 'outdated' && i.reviewStatus === 'normal')
+    );
+    renderTranslationBanner();
+    if (!list) return;
+    if (!items.length) {
+      list.innerHTML = `<p class="meta">${escapeHtml(tt('translations.empty'))}</p>`;
+      return;
+    }
+    list.innerHTML = items
+      .map((item) => {
+        const freshness = tt(`translations.freshness.${item.freshnessStatus}`) || item.freshnessStatus;
+        const review =
+          item.reviewStatus === 'acknowledged'
+            ? tt('translations.review.acknowledged')
+            : '';
+        const badgeClass =
+          item.reviewStatus === 'acknowledged'
+            ? 'is-acknowledged'
+            : item.freshnessStatus === 'missing'
+              ? 'is-missing'
+              : item.freshnessStatus === 'outdated'
+                ? 'is-outdated'
+                : '';
+        const canAck = item.freshnessStatus === 'outdated' && item.reviewStatus === 'normal';
+        return `<article class="translation-row" data-entity-type="${escapeAttr(item.entityType)}" data-entity-id="${escapeAttr(item.entityId)}" data-locale="${escapeAttr(item.locale)}">
+          <div>
+            <strong>${escapeHtml(item.entityType)}:${escapeHtml(item.entityId)}</strong>
+            <p class="translation-row__meta">${escapeHtml(localeLabel(item.locale))}
+              <span class="translation-badge ${badgeClass}">${escapeHtml(freshness)}${review ? ` · ${escapeHtml(review)}` : ''}</span>
+              · rev ${escapeHtml(String(item.translatedFromRevision))}/${escapeHtml(String(item.sourceRevision))}
+            </p>
+          </div>
+          <div class="translation-row__actions">
+            <button type="button" class="btn btn-ghost" data-translation-goto>${escapeHtml(tt('translations.goEdit'))}</button>
+            ${
+              canAck
+                ? `<button type="button" class="btn btn-ghost" data-translation-ack>${escapeHtml(tt('translations.acknowledge'))}</button>`
+                : ''
+            }
+          </div>
+        </article>`;
+      })
+      .join('');
+  } catch (err) {
+    if (status) showStatus(status, err.message || tt('translations.loadFailed'), true);
+  }
+}
+
 function initLocalesFromStorage() {
   // Early chrome for login (may be overridden once site locales are known).
   adminLocaleLocked = readStoredBool(STORAGE_ADMIN_LOCKED);
@@ -244,6 +353,7 @@ async function api(path, options = {}) {
   if (!res.ok) {
     const err = new Error(data.error || tt('common.error'));
     err.status = res.status;
+    err.data = data;
     throw err;
   }
   return data;
@@ -307,6 +417,36 @@ function switchTab(name) {
       if (status) showStatus(status, err.message || tt('audit.loadFailed'), true);
     });
   }
+  if (name === 'translations') {
+    loadTranslationsPanel().catch(() => {});
+  }
+}
+
+/** Attention only on the locale that needs work - never on the source locale. */
+function fieldAttention(entityType, entityId) {
+  if (!isMultilingualUi() || !needingAttention.length) return null;
+  if (contentLocale === siteDefaultLocale) return null;
+  const id = String(entityId);
+  return (
+    needingAttention.find(
+      (i) =>
+        i.entityType === entityType &&
+        String(i.entityId) === id &&
+        i.locale === contentLocale
+    ) || null
+  );
+}
+
+function attentionBadgeHtml(att, entityType, entityId) {
+  if (!att) return '';
+  const status = tt(`translations.freshness.${att.freshnessStatus}`) || att.freshnessStatus;
+  const canAck = att.freshnessStatus === 'outdated' && att.reviewStatus !== 'acknowledged';
+  const ackBtn = canAck
+    ? `<button type="button" class="btn btn-ghost field-attention-ack" data-field-ack data-entity-type="${escapeAttr(entityType)}" data-entity-id="${escapeAttr(String(entityId))}" data-locale="${escapeAttr(att.locale)}">${escapeHtml(tt('translations.acknowledge'))}</button>`
+    : '';
+  return `<span class="field-attention-actions"><span class="field-attention-badge is-${escapeAttr(att.freshnessStatus)}" title="${escapeAttr(
+    tt('translations.fieldNeedsAttention')
+  )}">${escapeHtml(status)}</span>${ackBtn}</span>`;
 }
 
 function renderContentFields() {
@@ -316,10 +456,14 @@ function renderContentFields() {
     const type = def[1];
     const label = fieldLabel(adminLocale, key);
     const value = contentState[key] || '';
+    const att = fieldAttention('site_content', key);
+    const wrapClass = att ? ` class="field-attention is-${escapeAttr(att.freshnessStatus)}"` : '';
+    const badge = attentionBadgeHtml(att, 'site_content', key);
+    const labelInner = `${label}${badge}`;
     if (type === 'textarea') {
-      return `<label>${label}<textarea data-key="${key}" lang="${contentLocale}" dir="${dir}" rows="4">${escapeHtml(value)}</textarea></label>`;
+      return `<label${wrapClass}>${labelInner}<textarea data-key="${key}" lang="${contentLocale}" dir="${dir}" rows="4">${escapeHtml(value)}</textarea></label>`;
     }
-    return `<label>${label}<input data-key="${key}" lang="${contentLocale}" dir="${dir}" value="${escapeAttr(value)}" /></label>`;
+    return `<label${wrapClass}>${labelInner}<input data-key="${key}" lang="${contentLocale}" dir="${dir}" value="${escapeAttr(value)}" /></label>`;
   }).join('');
 }
 
@@ -332,11 +476,14 @@ function renderServices() {
 
   const dir = localeDir(contentLocale);
   servicesFields.innerHTML = servicesState
-    .map(
-      (s, index) => `
-      <div class="card" data-service-id="${s.id}">
+    .map((s, index) => {
+      const att = fieldAttention('service', s.id);
+      const cardClass = att ? ` card--attention is-${att.freshnessStatus}` : '';
+      const badge = attentionBadgeHtml(att, 'service', s.id);
+      return `
+      <div class="card${cardClass}" data-service-id="${s.id}">
         <div class="card-top">
-          <h4>${tt('content.serviceN', { n: index + 1 })}</h4>
+          <h4>${tt('content.serviceN', { n: index + 1 })}${badge}</h4>
           <div class="card-actions">
             <label class="check"><input type="checkbox" data-service-visible ${s.visible ? 'checked' : ''}/> ${tt('content.visible')}</label>
             <button type="button" class="btn btn-danger" data-delete-service="${s.id}" ${canDelete ? '' : 'disabled'}>${tt('content.delete')}</button>
@@ -344,8 +491,8 @@ function renderServices() {
         </div>
         <label>${tt('content.serviceName')}<input data-service-title lang="${contentLocale}" dir="${dir}" value="${escapeAttr(s.title)}" /></label>
         <label>${tt('content.serviceDesc')}<textarea data-service-description lang="${contentLocale}" dir="${dir}" rows="3">${escapeHtml(s.description)}</textarea></label>
-      </div>`
-    )
+      </div>`;
+    })
     .join('');
 }
 
@@ -418,13 +565,16 @@ function renderPortfolio() {
     return;
   }
   portfolioList.innerHTML = portfolioState
-    .map(
-      (item, index) => `
-      <article class="card card-portfolio" data-id="${item.id}">
+    .map((item, index) => {
+      const att = fieldAttention('portfolio_item', item.id);
+      const cardClass = att ? ` card--attention is-${att.freshnessStatus}` : '';
+      const badge = attentionBadgeHtml(att, 'portfolio_item', item.id);
+      return `
+      <article class="card card-portfolio${cardClass}" data-id="${item.id}">
         <div class="card-top">
           ${portfolioThumbHtml(item)}
           <div class="card-copy">
-            <h4>${escapeHtml(item.title || tt('portfolio.untitled'))}</h4>
+            <h4>${escapeHtml(item.title || tt('portfolio.untitled'))}${badge}</h4>
             <div class="meta">${escapeHtml((item.categories || [item.category]).filter(Boolean).join(' · '))} · ${item.media_type === 'video' ? tt('portfolio.video') : tt('portfolio.image')} · ${item.visible ? tt('portfolio.visible') : tt('portfolio.hidden')}${item.featured ? ` · ${tt('portfolio.onHome')}` : ''}</div>
           </div>
         </div>
@@ -434,8 +584,8 @@ function renderPortfolio() {
           <button type="button" class="btn btn-ghost btn-icon" data-down="${item.id}" aria-label="${tt('portfolio.moveDown')}" ${index === portfolioState.length - 1 ? 'disabled' : ''}>↓</button>
           <button type="button" class="btn btn-danger" data-delete="${item.id}">${tt('portfolio.delete')}</button>
         </div>
-      </article>`
-    )
+      </article>`;
+    })
     .join('');
 }
 
@@ -482,7 +632,13 @@ async function loadAdminData({ locale } = {}) {
   contentState = contentRes.content || {};
   servicesState = contentRes.services || [];
   portfolioState = portfolioRes.items || [];
+  sourceRevisions = {
+    ...(contentRes.sourceRevisions || {}),
+    ...(portfolioRes.sourceRevisions || {}),
+  };
+  needingAttention = Array.isArray(contentRes.needingAttention) ? contentRes.needingAttention : [];
   categories = portfolioRes.categories || categories;
+  syncTranslationsUi();
   const categoryHtml = categories
     .map(
       (c) =>
@@ -579,6 +735,25 @@ function renderPublishStatus(data) {
 
   publishStrip?.classList.toggle('is-sticky', !busy && hasChanges);
   syncPublishStickyOffset();
+  syncOutdatedPublishWarning(data);
+}
+
+/** Show/clear the publish-strip outdated notice; does not clobber errors or in-flight messages. */
+function syncOutdatedPublishWarning(data) {
+  if (!publishMessage) return;
+  const warn = tt('publish.outdatedWarning');
+  const showingWarn = !publishMessage.hidden && publishMessage.textContent === warn;
+  if (data?.hasOutdatedTranslations) {
+    if (showingWarn || publishMessage.hidden || !publishMessage.textContent) {
+      showStatus(publishMessage, warn, false);
+    }
+    return;
+  }
+  if (showingWarn) {
+    publishMessage.hidden = true;
+    publishMessage.textContent = '';
+    publishMessage.classList.remove('is-error');
+  }
 }
 
 async function refreshPublishStatus() {
@@ -692,16 +867,28 @@ async function saveContentDraft() {
   const locale = contentLocale;
   const { content: nextContent, services: nextServices } = collectContentDraft();
   saveContentBtn.disabled = true;
-  await api(withContentLocale('/api/admin/content', locale), {
+  const res = await api(withContentLocale('/api/admin/content', locale), {
     method: 'PUT',
-    body: JSON.stringify({ locale, content: nextContent, services: nextServices }),
+    body: JSON.stringify({
+      locale,
+      content: nextContent,
+      services: nextServices,
+      expectedSourceRevisions: sourceRevisions,
+    }),
   });
   if (locale !== contentLocale) return;
   contentState = nextContent;
   servicesState = nextServices.map((s) => ({ ...s, visible: s.visible ? 1 : 0 }));
   markContentClean();
+  if (Array.isArray(res?.needingAttention)) {
+    needingAttention = res.needingAttention;
+    bannerDismissed = false;
+    renderTranslationBanner();
+  }
+  await loadAdminData({ locale }).catch(() => {});
   const pub = await refreshPublishStatus().catch(() => null);
   showStatus(status, draftSavedMessage(pub));
+  // Outdated notice on publish strip is synced inside refreshPublishStatus.
 }
 
 saveContentBtn.addEventListener('click', async () => {
@@ -711,6 +898,91 @@ saveContentBtn.addEventListener('click', async () => {
     await saveContentDraft();
   } catch (err) {
     updateSaveBar();
+    if (err.data?.needingAttention) {
+      needingAttention = err.data.needingAttention;
+      bannerDismissed = false;
+      renderTranslationBanner();
+    }
+    showStatus(status, err.message, true);
+  }
+});
+
+document.getElementById('translationBannerOpen')?.addEventListener('click', () => {
+  switchTab('translations');
+});
+document.getElementById('translationBannerDismiss')?.addEventListener('click', () => {
+  bannerDismissed = true;
+  renderTranslationBanner();
+});
+document.getElementById('translationsRefreshBtn')?.addEventListener('click', () => {
+  loadTranslationsPanel().catch(() => {});
+});
+async function acknowledgeTranslationItem({ entityType, entityId, locale, statusEl }) {
+  await api('/api/admin/translations/acknowledge', {
+    method: 'POST',
+    body: JSON.stringify({ entityType, entityId, locale }),
+  });
+  if (statusEl) showStatus(statusEl, tt('translations.ackOk'));
+  await loadTranslationsPanel().catch(() => {});
+  await loadAdminData({ locale: contentLocale }).catch(() => {});
+  await refreshPublishStatus().catch(() => {});
+}
+
+document.getElementById('translationsList')?.addEventListener('click', async (ev) => {
+  const row = ev.target.closest('.translation-row');
+  if (!row) return;
+  const locale = row.dataset.locale;
+  const entityType = row.dataset.entityType;
+  const entityId = row.dataset.entityId;
+  if (ev.target.closest('[data-translation-goto]')) {
+    contentLocale = resolveContentLocale(locale);
+    writeStoredLocale(STORAGE_CONTENT, contentLocale);
+    syncAdminLocaleToContent({ persist: true });
+    applyChrome();
+    await loadAdminData({ locale: contentLocale });
+    switchTab(entityType === 'portfolio_item' ? 'portfolio' : 'content');
+    return;
+  }
+  if (ev.target.closest('[data-translation-ack]')) {
+    const status = document.getElementById('translationsStatus');
+    try {
+      await acknowledgeTranslationItem({ entityType, entityId, locale, statusEl: status });
+    } catch (err) {
+      showStatus(status, err.message, true);
+    }
+  }
+});
+
+document.getElementById('tab-content')?.addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('[data-field-ack]');
+  if (!btn) return;
+  ev.preventDefault();
+  const status = document.getElementById('contentStatus');
+  try {
+    await acknowledgeTranslationItem({
+      entityType: btn.dataset.entityType,
+      entityId: btn.dataset.entityId,
+      locale: btn.dataset.locale || contentLocale,
+      statusEl: status,
+    });
+  } catch (err) {
+    showStatus(status, err.message, true);
+  }
+});
+
+document.getElementById('tab-portfolio')?.addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('[data-field-ack]');
+  if (!btn) return;
+  ev.preventDefault();
+  const status = document.getElementById('portfolioStatus');
+  try {
+    await acknowledgeTranslationItem({
+      entityType: btn.dataset.entityType,
+      entityId: btn.dataset.entityId,
+      locale: btn.dataset.locale || contentLocale,
+      statusEl: status,
+    });
+  } catch (err) {
     showStatus(status, err.message, true);
   }
 });
@@ -1149,7 +1421,12 @@ itemForm.addEventListener('submit', async (event) => {
       const existing = portfolioState.find((p) => String(p.id) === String(id));
       await api(withContentLocale(`/api/admin/portfolio/${id}`, locale), {
         method: 'PUT',
-        body: JSON.stringify({ ...payload, sort_order: existing?.sort_order || 0 }),
+        body: JSON.stringify({
+          ...payload,
+          sort_order: existing?.sort_order || 0,
+          expectedSourceRevision: sourceRevisions[`portfolio_item:${id}`],
+          expectedSourceRevisions: sourceRevisions,
+        }),
       });
     } else {
       await api(withContentLocale('/api/admin/portfolio', locale), {

@@ -6,6 +6,8 @@ DELETE FROM preview_tokens;
 DELETE FROM sessions;
 UPDATE site_publish_state SET published_version_id = NULL, previous_version_id = NULL, publishing = 0, updated_at = datetime('now');
 DELETE FROM site_versions;
+DELETE FROM translation_status;
+DELETE FROM translation_source_revisions;
 DELETE FROM admin_users;
 DELETE FROM site_content;
 DELETE FROM service_translations;
@@ -99,3 +101,8 @@ INSERT INTO service_translations (service_id, locale, title, description) VALUES
   (1, 'en', 'First service', 'Short description of the first service. Edit from the admin.'),
   (2, 'en', 'Second service', 'Short description of the second service. Edit from the admin.'),
   (3, 'en', 'Third service', 'Short description of the third service. Edit from the admin.');
+
+-- Translation freshness rows are NOT seeded here (no locale hardcoding).
+-- ensureAllTranslationStatusRows() creates revision/status rows from
+-- I18N.defaultLocale + getLocales() on first Admin translations/content access.
+-- DELETE above keeps db:reset clean.

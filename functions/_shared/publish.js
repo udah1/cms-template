@@ -6,6 +6,7 @@ import {
 } from './content.js';
 import { getDefaultLocale, resolveLocale } from './i18n.js';
 import { buildSeoArtifacts } from './seo.js';
+import { reconcileAfterDraftRestore, snapshotTranslatedDraft } from './translations.js';
 
 function randomToken() {
   const bytes = crypto.getRandomValues(new Uint8Array(24));
@@ -232,8 +233,16 @@ export async function rollbackToPrevious(db, userId, siteOrigin, locale = getDef
     }
     if (!payload.locale) payload.locale = prev.locale || resolved;
 
+    const beforeSnapshot = await snapshotTranslatedDraft(db, resolved);
+
     // Restore draft workspace for this locale only (media URLs kept as-is).
     await restoreDraftFromPayload(db, payload);
+
+    await reconcileAfterDraftRestore(db, {
+      locale: resolved,
+      beforeSnapshot,
+      actorUserId: userId,
+    });
 
     // Keep the same lock through publish so nothing interleaves after restore.
     return await publishFromDraft({
