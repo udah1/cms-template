@@ -76,11 +76,26 @@ CREATE TABLE IF NOT EXISTS preview_tokens (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS audit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  actor_user_id INTEGER REFERENCES admin_users(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT,
+  summary TEXT NOT NULL,
+  details_json TEXT,
+  success INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_services_sort ON services(sort_order);
 CREATE INDEX IF NOT EXISTS idx_portfolio_sort ON portfolio_items(sort_order);
 CREATE INDEX IF NOT EXISTS idx_site_versions_status ON site_versions(status);
 CREATE INDEX IF NOT EXISTS idx_preview_tokens_expires ON preview_tokens(expires_at);
+CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_log_actor_created ON audit_log(actor_user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id);
 
 INSERT OR IGNORE INTO site_publish_state (id, published_version_id, previous_version_id, publishing)
 VALUES (1, NULL, NULL, 0);

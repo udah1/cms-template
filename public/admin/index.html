@@ -33,6 +33,7 @@
         <nav class="tabs" aria-label="ניווט ניהול">
           <button type="button" class="tab active" data-tab="content">תוכן</button>
           <button type="button" class="tab" data-tab="portfolio">תיק עבודות</button>
+          <button type="button" class="tab" data-tab="audit">היסטוריית שינויים</button>
           <button type="button" class="tab" data-tab="password">סיסמה</button>
         </nav>
         <button type="button" id="logoutBtn" class="btn btn-ghost">יציאה</button>
@@ -77,6 +78,63 @@
           <p class="meta">העלאה מרובה לתמונות בלבד - כל קובץ הופך לפריט נפרד. סרטונים: פריט חדש, אחד בכל פעם.</p>
           <p id="portfolioStatus" class="status" hidden></p>
           <div id="portfolioList" class="stack"></div>
+        </section>
+
+        <section id="tab-audit" class="panel hidden">
+          <div class="panel-head">
+            <h2>היסטוריית שינויים</h2>
+            <button type="button" id="auditRefreshBtn" class="btn btn-ghost">רענון</button>
+          </div>
+          <p class="meta">יומן קריאה בלבד - מי ביצע איזו פעולה ומתי. אין מחיקה מכאן.</p>
+          <form id="auditFilters" class="audit-filters">
+            <label>פעולה
+              <select name="action" id="auditActionFilter">
+                <option value="">הכל</option>
+                <option value="content.update">content.update</option>
+                <option value="service.create">service.create</option>
+                <option value="service.update">service.update</option>
+                <option value="service.delete">service.delete</option>
+                <option value="portfolio.create">portfolio.create</option>
+                <option value="portfolio.update">portfolio.update</option>
+                <option value="portfolio.delete">portfolio.delete</option>
+                <option value="portfolio.reorder">portfolio.reorder</option>
+                <option value="media.upload">media.upload</option>
+                <option value="media.delete">media.delete</option>
+                <option value="preview.create">preview.create</option>
+                <option value="publish.succeeded">publish.succeeded</option>
+                <option value="publish.failed">publish.failed</option>
+                <option value="rollback.succeeded">rollback.succeeded</option>
+                <option value="rollback.failed">rollback.failed</option>
+                <option value="auth.login">auth.login</option>
+                <option value="auth.logout">auth.logout</option>
+                <option value="auth.change_password">auth.change_password</option>
+              </select>
+            </label>
+            <label>סוג ישות
+              <select name="entity_type" id="auditEntityFilter">
+                <option value="">הכל</option>
+                <option value="content">content</option>
+                <option value="service">service</option>
+                <option value="portfolio">portfolio</option>
+                <option value="media">media</option>
+                <option value="preview">preview</option>
+                <option value="version">version</option>
+                <option value="auth">auth</option>
+              </select>
+            </label>
+            <label>מתאריך
+              <input type="date" name="from" id="auditFromFilter" />
+            </label>
+            <label>עד תאריך
+              <input type="date" name="to" id="auditToFilter" />
+            </label>
+            <button type="submit" class="btn btn-ghost">סינון</button>
+          </form>
+          <p id="auditStatus" class="status" hidden></p>
+          <div id="auditList" class="audit-list stack"></div>
+          <div class="audit-pager">
+            <button type="button" id="auditMoreBtn" class="btn btn-ghost" hidden>טען עוד</button>
+          </div>
         </section>
 
         <section id="tab-password" class="panel hidden">

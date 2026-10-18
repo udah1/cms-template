@@ -4,6 +4,8 @@
 
 אין תלות בפרויקט לקוח ספציפי. כל התוכן ניתן לעריכה מדף הניהול.
 
+להקמת אתר אמיתי חדש מה־Template, התחילו מ־[PROJECT-BOOTSTRAP.md](PROJECT-BOOTSTRAP.md). המסמך כולל את סדר ההקמה, Cloudflare, אבטחה, SSR, בדיקות, Audit Log ו־handoff.
+
 ## הרצה מקומית
 
 ```bash
@@ -37,6 +39,20 @@ npm run dev
 - **Preview** - טוקן זמני, `/?preview=TOKEN`, עם `noindex`.
 - **Publish** - צילום טיוטה לגרסה חדשה.
 - **Rollback** - שחזור לגרסה הקודמת (מדיה לא נמחקת).
+
+## Audit log
+
+פעולות אדמין משמעותיות נרשמות לטבלת `audit_log` (מי, פעולה, ישות, תקציר, diff ב־`details_json` כשיש).
+קריאה: `GET /api/admin/audit` (מחוברים בלבד) ולשונית **היסטוריית שינויים** באדמין - קריאה בלבד, בלי מחיקה.
+Pagination: `limit` + `cursor` (id של הרשומה האחרונה). סינון: `action`, `entity_type`, `actor_user_id`, `from`, `to`.
+כתיבת Audit היא best-effort: כשל בכתיבה לא מפיל את ה־mutation (מתועד בלוג שרת).
+לא נשמרים סיסמאות, טוקנים או session; המפתחות הרגישים מרודקטים גם בקריאה. Migration: `migrations/004_audit_log.sql` (כלול גם ב־`schema.sql`).
+
+בדיקה מקומית מבודדת (יוצרת D1 נפרד ב־`.wrangler/state-audit-test` + שרת זמני על פורט 8799; לא נוגעת ב־`.wrangler/state` ולא ב־remote):
+
+```bash
+npm run test:audit
+```
 
 ## Cloudflare (פריסה)
 

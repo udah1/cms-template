@@ -140,6 +140,12 @@ function switchTab(name) {
     panel.classList.toggle('hidden', panel.id !== `tab-${name}`);
   });
   saveBar.hidden = name !== 'content';
+  if (name === 'audit') {
+    loadAuditLog({ reset: true }).catch((err) => {
+      const status = document.getElementById('auditStatus');
+      if (status) showStatus(status, err.message || 'טעינת היסטוריה נכשלה', true);
+    });
+  }
 }
 
 function renderContentFields() {
@@ -1076,6 +1082,124 @@ rollbackBtn.addEventListener('click', async () => {
 
 window.addEventListener('resize', () => {
   if (publishStrip?.classList.contains('is-sticky')) syncPublishStickyOffset();
+});
+
+let auditNextCursor = null;
+let auditLoading = false;
+
+function auditFilterParams() {
+  const params = new URLSearchParams();
+  const action = document.getElementById('auditActionFilter')?.value || '';
+  const entityType = document.getElementById('auditEntityFilter')?.value || '';
+  const from = document.getElementById('auditFromFilter')?.value || '';
+  const to = document.getElementById('auditToFilter')?.value || '';
+  if (action) params.set('action', action);
+  if (entityType) params.set('entity_type', entityType);
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  params.set('limit', '25');
+  return params;
+}
+
+function formatAuditDetails(details) {
+  if (!details || typeof details !== 'object') return '';
+  const fields = details.fields;
+  if (fields && typeof fields === 'object') {
+    const lines = Object.entries(fields).map(([key, diff]) => {
+      const before = diff && typeof diff === 'object' && 'before' in diff ? diff.before : '';
+      const after = diff && typeof diff === 'object' && 'after' in diff ? diff.after : '';
+      return `${key}:\n  לפני: ${stringifyAuditValue(before)}\n  אחרי: ${stringifyAuditValue(after)}`;
+    });
+    if (lines.length) return lines.join('\n\n');
+  }
+  try {
+    return JSON.stringify(details, null, 2);
+  } catch {
+    return '';
+  }
+}
+
+function stringifyAuditValue(value) {
+  if (value == null) return '—';
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  const text = String(value);
+  return text.length ? text : '—';
+}
+
+function renderAuditItems(items, { append }) {
+  const list = document.getElementById('auditList');
+  if (!list) return;
+  const html = (items || [])
+    .map((item) => {
+      const when = item.createdAt ? escapeHtml(item.createdAt) : '—';
+      const user = escapeHtml(item.actorEmail || (item.actorUserId ? `#${item.actorUserId}` : '—'));
+      const action = escapeHtml(item.action || '');
+      const entity = escapeHtml([item.entityType, item.entityId].filter(Boolean).join(' · ') || '—');
+      const summary = escapeHtml(item.summary || '');
+      const ok = item.success !== false;
+      const badge = ok
+        ? '<span class="audit-badge">הצלחה</span>'
+        : '<span class="audit-badge is-fail">כישלון</span>';
+      const detailsText = formatAuditDetails(item.details);
+      const detailsBlock = detailsText
+        ? `<pre class="audit-diff">${escapeHtml(detailsText)}</pre>`
+        : '';
+      return `<article class="audit-row">
+        <div class="audit-row-head">
+          <time datetime="${when}">${when}</time>
+          <span class="audit-action">${action}</span>
+          ${badge}
+        </div>
+        <p class="audit-meta">${user} · ${entity}</p>
+        <p class="audit-summary">${summary}</p>
+        ${detailsBlock}
+      </article>`;
+    })
+    .join('');
+  if (append) list.insertAdjacentHTML('beforeend', html);
+  else list.innerHTML = html || '<p class="meta">אין רשומות להצגה.</p>';
+}
+
+async function loadAuditLog({ reset = false, append = false } = {}) {
+  if (auditLoading) return;
+  const status = document.getElementById('auditStatus');
+  const moreBtn = document.getElementById('auditMoreBtn');
+  auditLoading = true;
+  try {
+    if (status) status.hidden = true;
+    const params = auditFilterParams();
+    if (!reset && append && auditNextCursor) params.set('cursor', String(auditNextCursor));
+    if (reset) auditNextCursor = null;
+    const data = await api(`/api/admin/audit?${params.toString()}`);
+    renderAuditItems(data.items || [], { append: append && !reset });
+    auditNextCursor = data.nextCursor || null;
+    if (moreBtn) moreBtn.hidden = !data.hasMore;
+  } catch (err) {
+    if (status) showStatus(status, err.message || 'טעינת היסטוריה נכשלה', true);
+    throw err;
+  } finally {
+    auditLoading = false;
+  }
+}
+
+document.getElementById('auditFilters')?.addEventListener('submit', (event) => {
+  event.preventDefault();
+  loadAuditLog({ reset: true }).catch(() => {});
+});
+
+document.getElementById('auditRefreshBtn')?.addEventListener('click', () => {
+  loadAuditLog({ reset: true }).catch(() => {});
+});
+
+document.getElementById('auditMoreBtn')?.addEventListener('click', () => {
+  if (!auditNextCursor) return;
+  loadAuditLog({ append: true }).catch(() => {});
 });
 
 boot();

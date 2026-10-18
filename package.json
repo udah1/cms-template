@@ -14,6 +14,7 @@
     "r2:create": "wrangler r2 bucket create cms-template-media",
     "r2:sync": "bash scripts/sync-media-to-r2.sh",
     "test:acceptance": "node scripts/acceptance-publish.mjs",
+    "test:audit": "node scripts/run-audit-tests.mjs",
     "test:ssr": "node scripts/acceptance-ssr.mjs"
   },
   "devDependencies": {
