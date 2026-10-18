@@ -31,7 +31,7 @@ import {
   rollbackToPrevious,
   validatePreviewToken,
 } from '../_shared/publish.js';
-import { buildJsonLd, resolveSiteOrigin } from '../_shared/seo.js';
+import { buildJsonLd, buildMeta, resolveSiteOrigin } from '../_shared/seo.js';
 
 const MAX_SERVICES = 10;
 const PREVIEW_ROBOTS = { 'X-Robots-Tag': 'noindex, nofollow, noarchive' };
@@ -93,9 +93,14 @@ export async function onRequest(context) {
         return json({ error: 'אין הרשאה לתצוגה מקדימה' }, 401, PREVIEW_ROBOTS);
       }
       const payload = await getDraftPublicPayload(db);
+      const origin = siteOrigin(request);
+      const meta = buildMeta(payload);
+      const jsonLd = buildJsonLd(payload, origin);
       return json(
         {
           ...payload,
+          meta,
+          jsonLd,
           preview: true,
         },
         200,
@@ -124,8 +129,10 @@ export async function onRequest(context) {
       }
       await clearLoginFailures(db, throttleKey);
       const token = await createSession(db, user.id);
+      // Seed demo password - never leave this on a live site after remote seed.
+      const mustChangePassword = String(body.password) === 'ChangeMe123!';
       return json(
-        { ok: true, email: user.email },
+        { ok: true, email: user.email, mustChangePassword },
         200,
         { 'Set-Cookie': sessionCookie(token, request) }
       );
@@ -154,6 +161,9 @@ export async function onRequest(context) {
       }
       if (String(body.newPassword).length < 8) {
         return badRequest('הסיסמה החדשה חייבת להכיל לפחות 8 תווים');
+      }
+      if (String(body.newPassword) === 'ChangeMe123!') {
+        return badRequest('אין להשתמש בסיסמת הדמו. בחרו סיסמה ייחודית.');
       }
       if (body.newPassword !== body.confirmPassword) {
         return badRequest('אימות הסיסמה החדשה לא תואם');

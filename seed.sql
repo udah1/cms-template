@@ -1,5 +1,7 @@
--- Demo admin: admin@example.com / ChangeMe123!
+-- Demo admin (LOCAL ONLY): admin@example.com / ChangeMe123!
+-- Never leave this password on a remote/production D1 after seed.
 -- Change the password from the admin UI after first login.
+-- Remote seed is gated: ALLOW_DEMO_REMOTE_SEED=1 npm run db:seed:remote
 DELETE FROM preview_tokens;
 DELETE FROM sessions;
 UPDATE site_publish_state SET published_version_id = NULL, previous_version_id = NULL, publishing = 0, updated_at = datetime('now') WHERE id = 1;

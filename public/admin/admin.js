@@ -423,7 +423,7 @@ async function pollUntilIdle() {
   });
 }
 
-async function enterApp(email) {
+async function enterApp(email, { mustChangePassword = false } = {}) {
   loginView.classList.add('hidden');
   appView.classList.remove('hidden');
   userEmail.textContent = email || '';
@@ -432,6 +432,14 @@ async function enterApp(email) {
     await refreshPublishStatus();
   } catch (err) {
     showStatus(publishMessage, err.message, true);
+  }
+  if (mustChangePassword) {
+    switchTab('password');
+    showStatus(
+      document.getElementById('passwordStatus'),
+      'זוהתה סיסמת הדמו (ChangeMe123!). החליפו אותה לפני פריסה לאתר חי.',
+      true
+    );
   }
 }
 
@@ -457,7 +465,7 @@ loginForm.addEventListener('submit', async (event) => {
         password: form.get('password'),
       }),
     });
-    await enterApp(data.email);
+    await enterApp(data.email, { mustChangePassword: !!data.mustChangePassword });
   } catch (err) {
     loginError.hidden = false;
     loginError.textContent = err.message;

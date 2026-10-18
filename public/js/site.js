@@ -478,6 +478,7 @@ function applySeo(data) {
 
 async function boot() {
   const previewToken = getPreviewToken();
+  const ssrReady = document.documentElement.dataset.ssr === '1';
   try {
     const endpoint = previewToken
       ? `/api/preview/site?token=${encodeURIComponent(previewToken)}`
@@ -486,14 +487,45 @@ async function boot() {
     if (!res.ok) throw new Error('api');
     const data = await res.json();
     if (previewToken || data.preview) enablePreviewMode();
-    applySeo(data);
-    applyContent(data.content || {});
-    renderServices(data.services || []);
+
+    // When HTML already came from SSR, keep SEO-critical text as served;
+    // still hydrate portfolio interactions and non-critical contact hooks.
+    if (!ssrReady) {
+      applySeo(data);
+      applyContent(data.content || {});
+      renderServices(data.services || []);
+    } else {
+      // Refresh contact chrome without rewriting SEO copy.
+      const content = data.content || {};
+      if (content.business_name) setText('[data-business]', content.business_name);
+      if (content.area_label) setText('[data-area]', content.area_label);
+      const wa = whatsappHref(content.whatsapp_url, content.whatsapp_message);
+      document.querySelectorAll('[data-whatsapp]').forEach((a) => {
+        a.href = wa;
+        a.target = '_blank';
+        a.rel = 'noreferrer';
+      });
+      const phone = content.contact_phone || '050-000-0000';
+      document.querySelectorAll('[data-tel]').forEach((a) => {
+        a.href = telHref(phone);
+      });
+      if (content.instagram_url) {
+        document.querySelectorAll('[data-instagram]').forEach((a) => {
+          a.href = content.instagram_url;
+        });
+      }
+      if (content.contact_email) {
+        document.querySelectorAll('[data-email]').forEach((a) => {
+          a.href = `mailto:${content.contact_email}`;
+        });
+      }
+    }
+
     const portfolio = data.portfolio || [];
     const isHome = document.documentElement.dataset.page === 'home';
     renderPortfolio(isHome ? portfolio.filter((item) => item.featured) : portfolio);
   } catch {
-    // Keep static HTML services/portfolio; do not wipe the page on temporary API failure.
+    // Keep SSR or static HTML; do not wipe the page on temporary API failure.
     if (previewToken) enablePreviewMode();
     document.querySelectorAll('[data-whatsapp]').forEach((a) => {
       if (a.getAttribute('href')?.includes('wa.me')) return;
