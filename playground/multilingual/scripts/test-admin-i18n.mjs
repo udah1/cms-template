@@ -137,6 +137,24 @@ async function main() {
     fail(5, `chrome he unexpected lang=${root.documentElement.lang} dir=${root.documentElement.dir}`);
   }
 
+  const titleEl = { textContent: '' };
+  const subtitleEl = el('data-i18n', 'login.subtitle');
+  const brandRoot = makeRoot({
+    '[data-i18n]': [subtitleEl],
+    '[data-i18n-aria]': [],
+    '[data-i18n-placeholder]': [],
+    '[data-i18n-title]': [],
+    '[data-i18n-alt]': [],
+    '[data-i18n="login.subtitle"]': [subtitleEl],
+  });
+  brandRoot.querySelector = (sel) => (sel === 'title' ? titleEl : null);
+  applyAdminChrome('he', { root: brandRoot, businessName: 'MYK Studio' });
+  if (titleEl.textContent === 'ניהול | MYK Studio' && subtitleEl.textContent === 'MYK Studio') {
+    pass(31, 'applyAdminChrome interpolates business name into title/subtitle');
+  } else {
+    fail(31, `brand chrome unexpected title=${titleEl.textContent} sub=${subtitleEl.textContent}`);
+  }
+
   const enChromeKeys = Object.keys(UI_STRINGS.en).filter(
     (k) => !k.startsWith('locale.') && k !== 'locale.he'
   );
@@ -156,6 +174,14 @@ async function main() {
     pass(1, 'HTML has dual locale pickers');
   } else {
     fail(1, 'HTML missing dual locale pickers');
+  }
+
+  const contentIdx = html.indexOf('id="contentLocaleSelect"');
+  const adminIdx = html.indexOf('id="adminLocaleSelect"');
+  if (contentIdx >= 0 && adminIdx > contentIdx) {
+    pass(31, 'content locale picker appears before admin locale picker');
+  } else {
+    fail(31, 'content locale picker should come before admin locale picker');
   }
 
   if (html.includes('localePickers') && html.includes('hidden')) {
@@ -182,6 +208,8 @@ async function main() {
     'switchAdminLocale',
     'cmsAdmin.adminLocale',
     'cmsAdmin.contentLocale',
+    'cmsAdmin.adminLocaleLocked',
+    'syncAdminLocaleToContent',
     'contentLoadGen',
   ];
   const missingSnip = requiredSnippets.filter((s) => !adminJs.includes(s));

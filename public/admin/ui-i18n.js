@@ -55,9 +55,9 @@ export const FIELD_LABELS = {
 
 export const UI_STRINGS = {
   he: {
-    'doc.title': 'ניהול | שם העסק',
+    'doc.title': 'ניהול | {name}',
     'login.heading': 'ניהול האתר',
-    'login.subtitle': 'שם העסק',
+    'login.subtitle': '{name}',
     'login.email': 'אימייל',
     'login.password': 'סיסמה',
     'login.submit': 'התחברות',
@@ -273,9 +273,9 @@ export const UI_STRINGS = {
     'ph.bulkTitle': 'למשל: פרויקט לדוגמה 1',
   },
   en: {
-    'doc.title': 'Admin | Business name',
+    'doc.title': 'Admin | {name}',
     'login.heading': 'Site admin',
-    'login.subtitle': 'Business name',
+    'login.subtitle': '{name}',
     'login.email': 'Email',
     'login.password': 'Password',
     'login.submit': 'Sign in',
@@ -607,20 +607,25 @@ export function applyStaticI18n(root, locale) {
 }
 
 /** Apply document lang/dir/title + static i18n for Admin Chrome. */
-export function applyAdminChrome(locale, { root = document } = {}) {
+export function applyAdminChrome(locale, { root = document, businessName } = {}) {
   const loc = normalizeUiLocale(locale);
   const dir = localeDir(loc);
+  const name = String(businessName || '').trim() || fieldLabel(loc, 'business_name');
   if (root.documentElement) {
     root.documentElement.lang = loc;
     root.documentElement.dir = dir;
   }
   if (root.title !== undefined || root.querySelector?.('title')) {
     const titleEl = root.querySelector?.('title');
-    const title = t(loc, 'doc.title');
+    const title = t(loc, 'doc.title', { name });
     if (titleEl) titleEl.textContent = title;
     if (typeof document !== 'undefined' && root === document) document.title = title;
   }
   applyStaticI18n(root, loc);
+  // login.subtitle uses {name}; static i18n cannot interpolate - set explicitly.
+  root.querySelectorAll?.('[data-i18n="login.subtitle"]').forEach((el) => {
+    el.textContent = t(loc, 'login.subtitle', { name });
+  });
   return { locale: loc, dir };
 }
 

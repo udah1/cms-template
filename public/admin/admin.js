@@ -47,6 +47,8 @@ let adminLocale = UI_DEFAULT_LOCALE;
 let contentLocale = UI_DEFAULT_LOCALE;
 let adminLocaleLocked = false;
 let contentLoadGen = 0;
+/** Published business name from /api/public/site (login screen + boot). */
+let siteBusinessName = '';
 
 function tt(key, vars) {
   return t(adminLocale, key, vars);
@@ -130,9 +132,28 @@ function withContentLocale(path, locale = contentLocale) {
   return `${path}${sep}locale=${encodeURIComponent(locale)}`;
 }
 
+function businessDisplayName() {
+  const live = document.querySelector('#tab-content [data-key="business_name"]');
+  const fromInput = String(live?.value || '').trim();
+  if (fromInput) return fromInput;
+  const fromDraft = String(contentState?.business_name || '').trim();
+  if (fromDraft) return fromDraft;
+  return String(siteBusinessName || '').trim();
+}
+
 function applyChrome() {
-  applyAdminChrome(adminLocale);
+  applyAdminChrome(adminLocale, { businessName: businessDisplayName() });
   syncLocalePickers();
+}
+
+async function loadSiteBrand() {
+  try {
+    const data = await api('/api/public/site');
+    siteBusinessName = String(data?.content?.business_name || '').trim();
+    applyChrome();
+  } catch {
+    /* unpublished / offline - keep field-label fallback */
+  }
 }
 
 function syncLocalePickers() {
@@ -954,10 +975,13 @@ async function boot() {
   }
   initLocalesFromStorage();
   applyChrome();
+  const brandReady = loadSiteBrand();
   try {
     const me = await api('/api/auth/me');
+    await brandReady;
     await enterApp(me.email);
   } catch {
+    await brandReady;
     hideBootLoader();
     appView.classList.add('hidden');
     loginView.classList.remove('hidden');
@@ -1001,7 +1025,10 @@ window.addEventListener('hashchange', () => {
   applyTabFromUrl();
 });
 
-document.getElementById('tab-content').addEventListener('input', updateSaveBar);
+document.getElementById('tab-content').addEventListener('input', (event) => {
+  updateSaveBar();
+  if (event.target?.dataset?.key === 'business_name') applyChrome();
+});
 document.getElementById('tab-content').addEventListener('change', updateSaveBar);
 
 async function saveContentDraft() {
