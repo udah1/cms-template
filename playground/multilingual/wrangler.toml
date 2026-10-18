@@ -1,0 +1,16 @@
+# REFERENCE ONLY - local playground. Do not deploy; placeholders only.
+name = "cms-template-pg-multilingual"
+compatibility_date = "2025-10-01"
+pages_build_output_dir = "public"
+
+# Local/dev placeholders - never point these at the Template production D1/R2.
+[[d1_databases]]
+binding = "DB"
+database_name = "cms-template-pg-multilingual"
+database_id = "00000000-0000-0000-0000-000000000000"
+preview_database_id = "00000000-0000-0000-0000-000000000000"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "cms-template-pg-multilingual-media"
+preview_bucket_name = "cms-template-pg-multilingual-media"

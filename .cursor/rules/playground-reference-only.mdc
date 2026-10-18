@@ -1,0 +1,21 @@
+---
+description: Playground multilingual is reference-only - never copy wholesale into client projects
+alwaysApply: true
+---
+
+# Playground = reference only
+
+`playground/multilingual/` is a **versioned reference implementation** of optional multilingual (he+en).
+
+## Hard rules for agents
+
+- Do **not** copy `playground/multilingual` wholesale into an existing client project.
+- Do **not** treat the Playground as the Template source of truth.
+- Do **not** run Playground `deploy`, remote D1 migrate/seed, or Template deploy from inside the Playground.
+- Authoritative instructions: `CMS-MULTILINGUAL-PROMPT.md` and `PROJECT-BOOTSTRAP.md` at the **repo root** (Template).
+- Inspect the Playground only to understand one possible implementation of routing, SSR, hreflang, and admin content-locale flows.
+- When adding multilingual to a real project: implement against the Template via the Multilingual Prompt; use the Playground as a read-only example.
+
+## Bootstrapping a client site
+
+Exclude `playground/` (and `.wrangler`, `node_modules`, `.git`) when copying the Template into a new client repo.

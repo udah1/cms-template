@@ -6,9 +6,20 @@
 
 - ה־Template הוא מקור בלבד; לא עובדים עליו ישירות.
 - כל פרויקט חדש מקבל Git repository, Pages project, D1 ו־R2 נפרדים.
-- לא מעתיקים `.git`, `.wrangler`, `node_modules` או `storage/media`.
+- לא מעתיקים `.git`, `.wrangler`, `node_modules`, `storage/media` או `playground/`.
 - לא משתמשים ב־Database, Bucket, דומיין, מדיה או credentials של פרויקט אחר.
 - אין להריץ `db:reset` מול Database משותף או מרוחק.
+
+## Playground multilingual - REFERENCE ONLY
+
+`playground/multilingual/` הוא **מימוש ייחוס מגרסא** (he+en) בלבד.
+
+- **אין** להעתיק את התיקייה wholesale לפרויקט לקוח קיים.
+- **אין** להתייחס אליו כמקור האמת של ה־Template.
+- הוראות סמכותיות לריבוי שפות: `CMS-MULTILINGUAL-PROMPT.md` + מסמך זה.
+- מותר לעיין ב־Playground כדי להבין דפוסי routing/SSR/hreflang/admin locales.
+- כשמוסיפים multilingual לפרויקט אמיתי: מיישמים מול ה־Template דרך הפרומפט; ה־Playground הוא דוגמה לקריאה בלבד.
+- אין להריץ deploy / migrate remote / seed remote מתוך ה־Playground.
 
 ## שלב 0 — החלטות שפה לפני המימוש
 
@@ -42,6 +53,8 @@ rsync -a \
   --exclude='.wrangler' \
   --exclude='node_modules' \
   --exclude='storage/media/*' \
+  --exclude='playground' \
+  --exclude='.serena' \
   /path/to/cms-template/ \
   /path/to/new-client-site/
 

@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ניהול | שם העסק</title>
+    <meta name="robots" content="noindex, nofollow, noarchive" />
+    <link rel="icon" href="/assets/brand-logo.png" type="image/png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/admin/admin.css" />
+  </head>
+  <body>
+    <section id="loginView" class="login-view hidden">
+      <form id="loginForm" class="login-card">
+        <img src="/assets/brand-logo.png" data-i18n-alt="login.logoAlt" alt="לוגו העסק" width="64" height="64" />
+        <h1 data-i18n="login.heading">ניהול האתר</h1>
+        <p data-i18n="login.subtitle">שם העסק</p>
+        <label><span data-i18n="login.email">אימייל</span><input name="email" type="email" autocomplete="username" required /></label>
+        <label><span data-i18n="login.password">סיסמה</span><input name="password" type="password" autocomplete="current-password" required /></label>
+        <p id="loginError" class="error" hidden></p>
+        <button type="submit" class="btn" data-i18n="login.submit">התחברות</button>
+      </form>
+    </section>
+
+    <div id="appView" class="app hidden">
+      <header class="admin-header">
+        <div>
+          <strong data-i18n="header.brand">ניהול</strong>
+          <span id="userEmail"></span>
+        </div>
+        <nav class="tabs" data-i18n-aria="nav.tabsAria" aria-label="ניווט ניהול">
+          <button type="button" class="tab active" data-tab="content" data-i18n="tab.content">תוכן</button>
+          <button type="button" class="tab" data-tab="portfolio" data-i18n="tab.portfolio">תיק עבודות</button>
+          <button type="button" class="tab" data-tab="audit" data-i18n="tab.audit">היסטוריית שינויים</button>
+          <button type="button" class="tab" data-tab="password" data-i18n="tab.password">סיסמה</button>
+        </nav>
+        <button type="button" id="logoutBtn" class="btn btn-ghost" data-i18n="header.logout">יציאה</button>
+      </header>
+
+      <section class="publish-strip" id="publishStrip" data-i18n-aria="publish.stripAria" aria-label="פרסום">
+        <div class="publish-meta">
+          <div id="localePickers" class="locale-pickers" hidden>
+            <label class="locale-picker locale-picker--content">
+              <span data-i18n="locale.content">שפת תוכן</span>
+              <select id="contentLocaleSelect" data-i18n-aria="locale.contentAria" aria-label="שפת התוכן לעריכה">
+                <option value="he" data-i18n="locale.he">עברית</option>
+                <option value="en" data-i18n="locale.en">English</option>
+              </select>
+            </label>
+            <label class="locale-picker locale-picker--admin">
+              <span data-i18n="locale.admin">שפת ממשק</span>
+              <select id="adminLocaleSelect" data-i18n-aria="locale.adminAria" aria-label="שפת ממשק הניהול">
+                <option value="he" data-i18n="locale.he">עברית</option>
+                <option value="en" data-i18n="locale.en">English</option>
+              </select>
+            </label>
+          </div>
+          <div class="publish-state">
+            <p id="publishStatusLabel" class="publish-status">פורסם</p>
+            <p id="publishVersionLabel" class="publish-version">גרסה מפורסמת: —</p>
+          </div>
+        </div>
+        <div class="publish-actions">
+          <button type="button" id="previewBtn" class="btn btn-ghost" data-i18n="publish.preview">תצוגה מקדימה</button>
+          <button type="button" id="publishBtn" class="btn" data-i18n="publish.publish">פרסום</button>
+          <button type="button" id="rollbackBtn" class="btn btn-ghost" disabled data-i18n="publish.rollback">שחזור</button>
+        </div>
+        <p id="publishMessage" class="status" hidden></p>
+      </section>
+
+      <main>
+        <section id="tab-content" class="panel">
+          <div class="panel-head">
+            <h2 data-i18n="content.heading">תוכן האתר</h2>
+          </div>
+          <p id="contentStatus" class="status" hidden></p>
+          <div class="form-grid" id="contentFields"></div>
+          <div class="panel-head services-head">
+            <h3 data-i18n="content.servicesHeading">שירותים</h3>
+            <button type="button" id="addServiceBtn" class="btn btn-ghost" data-i18n="content.addService">שירות חדש</button>
+          </div>
+          <p class="meta services-hint" data-i18n="content.servicesHint">עד 10 שירותים, לפחות אחד. עריכת טקסט ו“מוצג” נשמרים בכפתור למטה.</p>
+          <div id="servicesFields" class="stack"></div>
+        </section>
+
+        <section id="tab-portfolio" class="panel hidden">
+          <div class="panel-head">
+            <h2 data-i18n="portfolio.heading">תיק עבודות</h2>
+            <div class="panel-head-actions">
+              <button type="button" id="bulkImagesBtn" class="btn btn-ghost" data-i18n="portfolio.bulk">העלאת כמה תמונות</button>
+              <button type="button" id="addItemBtn" class="btn" data-i18n="portfolio.add">פריט חדש</button>
+            </div>
+          </div>
+          <p class="meta" data-i18n="portfolio.hint">העלאה מרובה לתמונות בלבד - כל קובץ הופך לפריט נפרד. סרטונים: פריט חדש, אחד בכל פעם.</p>
+          <p id="portfolioStatus" class="status" hidden></p>
+          <div id="portfolioList" class="stack"></div>
+        </section>
+
+        <section id="tab-audit" class="panel hidden">
+          <div class="panel-head">
+            <h2 data-i18n="audit.heading">היסטוריית שינויים</h2>
+            <button type="button" id="auditRefreshBtn" class="btn btn-ghost" data-i18n="audit.refresh">רענון</button>
+          </div>
+          <p class="meta" data-i18n="audit.hint">יומן קריאה בלבד - מי ביצע איזו פעולה ומתי. אין מחיקה מכאן.</p>
+          <form id="auditFilters" class="audit-filters">
+            <label><span data-i18n="audit.action">פעולה</span>
+              <select name="action" id="auditActionFilter">
+                <option value="" data-i18n="audit.all">הכל</option>
+                <option value="content.update">content.update</option>
+                <option value="service.create">service.create</option>
+                <option value="service.update">service.update</option>
+                <option value="service.delete">service.delete</option>
+                <option value="portfolio.create">portfolio.create</option>
+                <option value="portfolio.update">portfolio.update</option>
+                <option value="portfolio.delete">portfolio.delete</option>
+                <option value="portfolio.reorder">portfolio.reorder</option>
+                <option value="media.upload">media.upload</option>
+                <option value="media.delete">media.delete</option>
+                <option value="preview.create">preview.create</option>
+                <option value="publish.succeeded">publish.succeeded</option>
+                <option value="publish.failed">publish.failed</option>
+                <option value="rollback.succeeded">rollback.succeeded</option>
+                <option value="rollback.failed">rollback.failed</option>
+                <option value="auth.login">auth.login</option>
+                <option value="auth.logout">auth.logout</option>
+                <option value="auth.change_password">auth.change_password</option>
+              </select>
+            </label>
+            <label><span data-i18n="audit.entityType">סוג ישות</span>
+              <select name="entity_type" id="auditEntityFilter">
+                <option value="" data-i18n="audit.all">הכל</option>
+                <option value="content">content</option>
+                <option value="service">service</option>
+                <option value="portfolio">portfolio</option>
+                <option value="media">media</option>
+                <option value="preview">preview</option>
+                <option value="version">version</option>
+                <option value="auth">auth</option>
+              </select>
+            </label>
+            <label><span data-i18n="audit.from">מתאריך</span>
+              <input type="date" name="from" id="auditFromFilter" />
+            </label>
+            <label><span data-i18n="audit.to">עד תאריך</span>
+              <input type="date" name="to" id="auditToFilter" />
+            </label>
+            <button type="submit" class="btn btn-ghost" data-i18n="audit.filter">סינון</button>
+          </form>
+          <p id="auditStatus" class="status" hidden></p>
+          <div id="auditList" class="audit-list stack"></div>
+          <div class="audit-pager">
+            <button type="button" id="auditMoreBtn" class="btn btn-ghost" hidden data-i18n="audit.more">טען עוד</button>
+          </div>
+        </section>
+
+        <section id="tab-password" class="panel hidden">
+          <div class="panel-head"><h2 data-i18n="password.heading">שינוי סיסמה</h2></div>
+          <form id="passwordForm" class="narrow-form">
+            <label><span data-i18n="password.current">סיסמה נוכחית</span><input name="currentPassword" type="password" autocomplete="current-password" required /></label>
+            <label><span data-i18n="password.new">סיסמה חדשה</span><input name="newPassword" type="password" autocomplete="new-password" required minlength="8" /></label>
+            <label><span data-i18n="password.confirm">אימות סיסמה חדשה</span><input name="confirmPassword" type="password" autocomplete="new-password" required minlength="8" /></label>
+            <p id="passwordStatus" class="status" hidden></p>
+            <button type="submit" class="btn" data-i18n="password.submit">עדכון סיסמה</button>
+          </form>
+        </section>
+      </main>
+
+      <div id="saveBar" class="save-bar">
+        <span id="saveBarHint" data-i18n="save.hintClean">אין שינויים לשמירה</span>
+        <button type="button" id="saveContentBtn" class="btn" disabled data-i18n="save.button">שמירת שינויים</button>
+      </div>
+    </div>
+
+    <dialog id="itemDialog">
+      <form method="dialog" id="itemForm" class="dialog-form">
+        <h3 id="itemDialogTitle" data-i18n="portfolio.itemDialog">פריט בתיק עבודות</h3>
+        <input type="hidden" name="id" />
+        <label><span data-i18n="item.title">כותרת</span><input name="title" required /></label>
+        <fieldset class="category-fieldset">
+          <legend data-i18n="item.categories">קטגוריות</legend>
+          <div id="itemCategories" class="category-checks"></div>
+          <p class="meta" data-i18n="item.categoriesHint">אפשר לבחור יותר מאחת</p>
+        </fieldset>
+        <label id="mediaTypeField" hidden><span data-i18n="item.mediaType">סוג מדיה</span>
+          <select name="media_type" id="mediaTypeSelect">
+            <option value="image" data-i18n="portfolio.image">תמונה</option>
+            <option value="video" data-i18n="portfolio.video">סרטון</option>
+          </select>
+        </label>
+        <p id="mediaTypeHint" class="meta" data-i18n="item.mediaTypeHint">סוג המדיה נקבע אוטומטית מהקובץ שתעלי.</p>
+
+        <fieldset class="source-fieldset">
+          <legend data-i18n="item.media">מדיה</legend>
+          <div class="source-radios" role="radiogroup" data-i18n-aria="item.mediaSourceAria" aria-label="מקור מדיה">
+            <label class="check"><input type="radio" name="media_source" value="upload" checked /> <span data-i18n="item.upload">העלאה</span></label>
+            <label class="check"><input type="radio" name="media_source" value="url" /> <span data-i18n="item.link">קישור</span></label>
+          </div>
+          <div id="mediaUploadPanel">
+            <input type="file" id="mediaFile" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" />
+          </div>
+          <div id="mediaUrlPanel" hidden>
+            <label class="nested-label"><span data-i18n="item.mediaUrl">כתובת מדיה</span>
+              <input name="media_url" data-i18n-placeholder="ph.mediaUrl" placeholder="https://… או /media/…" />
+            </label>
+          </div>
+          <p id="mediaCurrentHint" class="meta" hidden></p>
+          <p id="mediaUploadStatus" class="meta" hidden></p>
+        </fieldset>
+
+        <fieldset class="source-fieldset" id="coverFieldset" hidden>
+          <legend data-i18n="item.coverLegend">קאבר לסרטון (אופציונלי)</legend>
+          <p class="meta" data-i18n="item.coverHint">בהעלאת סרטון נוצר קאבר אוטומטי. אפשר להחליף בהעלאה או בקישור.</p>
+          <div class="source-radios" role="radiogroup" data-i18n-aria="item.coverSourceAria" aria-label="מקור קאבר">
+            <label class="check"><input type="radio" name="cover_source" value="upload" checked /> <span data-i18n="item.upload">העלאה</span></label>
+            <label class="check"><input type="radio" name="cover_source" value="url" /> <span data-i18n="item.link">קישור</span></label>
+          </div>
+          <div id="coverUploadPanel">
+            <input type="file" id="coverFile" accept="image/jpeg,image/png,image/webp,image/gif" />
+          </div>
+          <div id="coverUrlPanel" hidden>
+            <label class="nested-label"><span data-i18n="item.coverUrl">כתובת קאבר</span>
+              <input name="cover_url" data-i18n-placeholder="ph.mediaUrl" placeholder="https://… או /media/…" />
+            </label>
+          </div>
+          <p id="coverCurrentHint" class="meta" hidden></p>
+        </fieldset>
+        <label><span data-i18n="item.alt">טקסט חלופי</span>
+          <input name="alt_text" data-i18n-placeholder="ph.altExample" placeholder="למשל: תיאור קצר של התמונה" />
+        </label>
+        <p class="meta" data-i18n="item.altHint">תיאור קצר של התמונה או הסרטון - לנגישות (קורא מסך) ולחיפוש. לא מוצג על התמונה עצמה.</p>
+        <label class="check"><input name="visible" type="checkbox" checked /> <span data-i18n="item.visibleLabel">מוצג באתר</span></label>
+        <p class="meta" data-i18n="item.visibleHint">אם מסומן - הפריט יופיע בתיק העבודות למבקרים. בלי סימון הוא נשמר אצלך אבל מוסתר מהאתר.</p>
+        <label class="check"><input name="featured" type="checkbox" /> <span data-i18n="item.featuredLabel">מוצג בדף הבית</span></label>
+        <p class="meta" data-i18n="item.featuredHint">אם מסומן (וגם מוצג באתר) - הפריט יופיע גם בגלריה הקצרה בדף הבית. בלי סימון הוא רק בתיק העבודות המלא.</p>
+        <p id="itemError" class="error" hidden></p>
+        <div class="dialog-actions">
+          <button type="submit" class="btn" value="save" data-i18n="common.save">שמירה</button>
+          <button type="button" class="btn btn-ghost" id="cancelItemBtn" data-i18n="common.cancel">ביטול</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="bulkDialog">
+      <form method="dialog" id="bulkForm" class="dialog-form">
+        <h3 data-i18n="bulk.heading">העלאת כמה תמונות</h3>
+        <p class="meta" data-i18n="bulk.hint">בוחרים הגדרות פעם אחת, ואז כמה קבצי תמונה. כל קובץ יהפוך לפריט נפרד.</p>
+        <label><span data-i18n="bulk.baseTitle">כותרת בסיס</span>
+          <input name="title" required data-i18n-placeholder="ph.bulkTitle" placeholder="למשל: פרויקט לדוגמה 1" />
+        </label>
+        <p class="meta" data-i18n="bulk.baseTitleHint">יתווסף מספר אוטומטית: פרויקט לדוגמה 1 1, פרויקט לדוגמה 1 2…</p>
+        <fieldset class="category-fieldset">
+          <legend data-i18n="item.categories">קטגוריות</legend>
+          <div id="bulkCategories" class="category-checks"></div>
+          <p class="meta" data-i18n="item.categoriesHint">אפשר לבחור יותר מאחת</p>
+        </fieldset>
+        <label><span data-i18n="bulk.images">תמונות</span>
+          <input type="file" id="bulkImagesInput" accept="image/jpeg,image/png,image/webp,image/gif" multiple required />
+        </label>
+        <p id="bulkFilesHint" class="meta" hidden></p>
+        <label><span data-i18n="bulk.altBase">טקסט חלופי בסיס</span>
+          <input name="alt_text" data-i18n-placeholder="ph.altExample" placeholder="למשל: תיאור קצר של התמונה" />
+        </label>
+        <p class="meta" data-i18n="bulk.altHint">יתווסף מספר אוטומטית לכל תמונה. אפשר להשאיר ריק.</p>
+        <label class="check"><input name="visible" type="checkbox" checked /> <span data-i18n="item.visibleLabel">מוצג באתר</span></label>
+        <p class="meta" data-i18n="bulk.visibleHint">אם מסומן - הפריטים יופיעו בתיק העבודות למבקרים.</p>
+        <label class="check"><input name="featured" type="checkbox" /> <span data-i18n="item.featuredLabel">מוצג בדף הבית</span></label>
+        <p class="meta" data-i18n="bulk.featuredHint">אם מסומן - כל התמונות בבחירה יופיעו גם בגלריה בדף הבית.</p>
+        <p id="bulkError" class="error" hidden></p>
+        <p id="bulkStatus" class="meta" hidden></p>
+        <div class="dialog-actions">
+          <button type="submit" class="btn" id="bulkSubmitBtn" data-i18n="bulk.submit">העלאה ושמירה</button>
+          <button type="button" class="btn btn-ghost" id="cancelBulkBtn" data-i18n="common.cancel">ביטול</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="confirmDialog">
+      <div class="dialog-form confirm-form">
+        <h3 id="confirmTitle" data-i18n="common.confirmDeleteTitle">אישור מחיקה</h3>
+        <p id="confirmMessage" data-i18n="common.confirmDeleteMessage">למחוק?</p>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-danger" id="confirmOkBtn" data-i18n="common.delete">מחיקה</button>
+          <button type="button" class="btn btn-ghost" id="confirmAltBtn" hidden>זרוק ועבור</button>
+          <button type="button" class="btn btn-ghost" id="confirmCancelBtn" data-i18n="common.cancel">ביטול</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="previewDialog" class="preview-dialog">
+      <div class="preview-dialog-inner">
+        <div class="preview-dialog-head">
+          <h3 id="previewDialogTitle" data-i18n="common.preview">תצוגה מקדימה</h3>
+          <button type="button" class="btn btn-ghost" id="previewCloseBtn" data-i18n="common.close">סגירה</button>
+        </div>
+        <div id="previewDialogBody" class="preview-dialog-body"></div>
+      </div>
+    </dialog>
+
+    <script src="/admin/admin.js" type="module"></script>
+  </body>
+</html>

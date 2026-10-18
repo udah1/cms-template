@@ -6,6 +6,8 @@
 
 להקמת אתר אמיתי חדש מה־Template, התחילו מ־[PROJECT-BOOTSTRAP.md](PROJECT-BOOTSTRAP.md). המסמך כולל את סדר ההקמה, Cloudflare, אבטחה, SSR, בדיקות, Audit Log ו־handoff.
 
+**Playground:** [playground/multilingual](playground/multilingual/) הוא מימוש ייחוס מגרסא (he+en) בלבד - REFERENCE ONLY. אל תעתיקו אותו לפרויקט לקוח; להפעלת multilingual השתמשו ב־[CMS-MULTILINGUAL-PROMPT.md](CMS-MULTILINGUAL-PROMPT.md).
+
 ## הרצה מקומית
 
 ```bash

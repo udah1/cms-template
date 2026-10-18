@@ -12,9 +12,17 @@ admin-credentials*
 # Wrangler / local state
 .wrangler/
 node_modules/
+.serena/
 
-# Local multilingual / experiment copies (not part of the template)
-/playground/
+# Versioned reference: playground/multilingual (see its README - REFERENCE ONLY).
+# Ignore other local experiment folders under playground/, and local junk inside the reference.
+/playground/*
+!/playground/multilingual/
+/playground/multilingual/.wrangler/
+/playground/multilingual/node_modules/
+/playground/multilingual/.serena/
+/playground/multilingual/.cursor/
+/playground/multilingual/storage/media/**
 
 # Optional local media copy for R2 re-sync only
 storage/media/**

@@ -1,0 +1,27 @@
+{
+  "name": "cms-template-playground-multilingual",
+  "private": true,
+  "version": "0.1.0",
+  "description": "REFERENCE ONLY multilingual playground (he+en). Local port 3788. Do not copy into client projects.",
+  "scripts": {
+    "dev": "PORT=3788 node scripts/dev.mjs",
+    "db:migrate": "wrangler d1 execute cms-template-pg-multilingual --local --persist-to=.wrangler/state --file=./schema.sql",
+    "db:seed": "wrangler d1 execute cms-template-pg-multilingual --local --persist-to=.wrangler/state --file=./seed.sql",
+    "db:reset": "rm -rf .wrangler/state/v3/d1 && npm run db:migrate && npm run db:seed",
+    "db:migrate:remote": "node -e \"console.error('REFERENCE ONLY: remote migrate disabled for playground'); process.exit(1)\"",
+    "db:seed:remote": "node -e \"console.error('REFERENCE ONLY: remote seed disabled for playground'); process.exit(1)\"",
+    "deploy": "node -e \"console.error('REFERENCE ONLY: do not deploy the playground. Use the Template root.'); process.exit(1)\"",
+    "r2:create": "node -e \"console.error('REFERENCE ONLY: R2 create disabled for playground'); process.exit(1)\"",
+    "r2:sync": "node -e \"console.error('REFERENCE ONLY: R2 sync disabled for playground'); process.exit(1)\"",
+    "test:acceptance": "node scripts/acceptance-publish.mjs",
+    "test:audit": "node scripts/run-audit-tests.mjs",
+    "test:ssr": "node scripts/acceptance-ssr.mjs",
+    "test:admin-i18n": "node scripts/test-admin-i18n.mjs",
+    "test:admin-i18n:api": "node scripts/run-admin-i18n-api.mjs",
+    "db:migrate:locale-ready": "node scripts/migrate-005-locale-ready.mjs",
+    "test:migrate-005": "node scripts/test-migrate-005.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.40.0"
+  }
+}

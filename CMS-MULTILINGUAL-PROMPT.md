@@ -18,6 +18,7 @@
 - במצב זה אין UI לשפות ציבורי, `hreflang`, prefix או ניהול תרגומי תוכן.
 - Admin Chrome i18n (תוויות ממשק, `adminLocale` / `contentLocale`) כבר ממומש ב־Template; פרומפט זה אינו יוצר אותו מחדש.
 - פרומפט זה מפעיל locales נוספים ומרחיב תוכן, URLs, SEO ו־Publish - לא את מילון ה־Admin Chrome.
+- `playground/multilingual/` (אם קיים בריפו) הוא REFERENCE ONLY: מותר לעיין בו כדוגמת מימוש; אסור להעתיק אותו wholesale לפרויקט לקוח. מקור ההוראות הוא פרומפט זה + PROJECT-BOOTSTRAP.md, לא ה־Playground.
 
 מטרת העבודה:
 - להוסיף תמיכה בריבוי שפות רק לפרויקט הנוכחי.
