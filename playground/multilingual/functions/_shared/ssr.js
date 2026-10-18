@@ -423,6 +423,18 @@ function injectWhatsApp(html, content) {
   );
 }
 
+/** Set Instagram href from CMS, or remove the link when the field is empty. */
+function injectInstagram(html, content) {
+  const href = String(content.instagram_url || '').trim();
+  if (!href) {
+    return html.replace(/<a\b[^>]*\sdata-instagram\b[^>]*>[\s\S]*?<\/a>/gi, '');
+  }
+  return html.replace(
+    /(<a\b[^>]*\sdata-instagram\b[^>]*\shref=["'])([^"']*)(["'])/gi,
+    `$1${escapeAttr(href)}$3`
+  );
+}
+
 function markSsr(html, preview) {
   if (/\sdata-ssr=["']/.test(html)) {
     html = html.replace(/\sdata-ssr=["'][^"']*["']/, ' data-ssr="1"');
@@ -651,6 +663,7 @@ export function renderHtml(template, payload, opts = {}) {
   html = setDataAttrText(html, 'data-email-label', content.contact_email);
   html = injectBusinessChrome(html, content.business_name);
   html = injectWhatsApp(html, content);
+  html = injectInstagram(html, content);
   html = applyStaticChrome(html, locale);
   html = rewriteInternalLinks(html, locale);
   html = injectLanguageSwitcher(html, isNotFound ? '/' : logicalPath, locale, available);

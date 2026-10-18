@@ -96,11 +96,16 @@ function applyContent(content) {
     a.href = telHref(phone);
   });
 
-  if (content.instagram_url) {
-    document.querySelectorAll('[data-instagram]').forEach((a) => {
-      a.href = content.instagram_url;
-    });
-  }
+  const instagram = String(content.instagram_url || '').trim();
+  document.querySelectorAll('[data-instagram]').forEach((a) => {
+    if (instagram) {
+      a.href = instagram;
+      a.hidden = false;
+      a.removeAttribute('hidden');
+    } else {
+      a.hidden = true;
+    }
+  });
   if (content.contact_email) {
     document.querySelectorAll('[data-email]').forEach((a) => {
       a.href = `mailto:${content.contact_email}`;
@@ -518,11 +523,16 @@ async function boot() {
       document.querySelectorAll('[data-tel]').forEach((a) => {
         a.href = telHref(phone);
       });
-      if (content.instagram_url) {
-        document.querySelectorAll('[data-instagram]').forEach((a) => {
-          a.href = content.instagram_url;
-        });
-      }
+      const instagram = String(content.instagram_url || '').trim();
+      document.querySelectorAll('[data-instagram]').forEach((a) => {
+        if (instagram) {
+          a.href = instagram;
+          a.hidden = false;
+          a.removeAttribute('hidden');
+        } else {
+          a.hidden = true;
+        }
+      });
       if (content.contact_email) {
         document.querySelectorAll('[data-email]').forEach((a) => {
           a.href = `mailto:${content.contact_email}`;

@@ -67,7 +67,7 @@ export function buildJsonLd(payload, siteOrigin) {
   const origin = resolveSiteOrigin(siteOrigin || CANONICAL_ORIGIN || 'http://127.0.0.1:3788');
   const phone = content.contact_phone || '050-000-0000';
   const email = content.contact_email || 'hello@example.com';
-  const instagram = content.instagram_url || '';
+  const instagram = String(content.instagram_url || '').trim();
   const area = content.area_label || '';
   const business = content.business_name || 'Business';
   const logo = `${origin}${meta.ogImage.startsWith('/') ? meta.ogImage : `/${meta.ogImage}`}`;
