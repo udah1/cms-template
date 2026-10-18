@@ -194,14 +194,6 @@ export async function onRequest(context) {
       const { token, maxAgeSeconds } = await createSession(db, user.id, { days });
       // Seed demo password - never leave this on a live site after remote seed.
       const mustChangePassword = String(body.password) === 'ChangeMe123!';
-      await logAudit(db, {
-        actorUserId: user.id,
-        action: 'auth.login',
-        entityType: 'auth',
-        entityId: user.id,
-        summary: 'התחברות הצליחה',
-        details: { email: user.email, rememberMe, sessionDays: days },
-      });
       return json(
         { ok: true, email: user.email, mustChangePassword },
         200,
@@ -211,19 +203,9 @@ export async function onRequest(context) {
 
     if (route === 'auth/logout' && method === 'POST') {
       requireCsrf(request);
-      const sessionUser = await requireUser(db, request);
+      await requireUser(db, request);
       const token = getSessionToken(request);
       await destroySession(db, token);
-      if (sessionUser) {
-        await logAudit(db, {
-          actorUserId: sessionUser.id,
-          action: 'auth.logout',
-          entityType: 'auth',
-          entityId: sessionUser.id,
-          summary: 'התנתקות',
-          details: { email: sessionUser.email },
-        });
-      }
       return json({ ok: true }, 200, { 'Set-Cookie': clearSessionCookie() });
     }
 
@@ -259,14 +241,6 @@ export async function onRequest(context) {
       }
       const nextHash = await hashPassword(body.newPassword);
       await db.prepare('UPDATE admin_users SET password_hash = ? WHERE id = ?').bind(nextHash, user.id).run();
-      await logAudit(db, {
-        actorUserId: user.id,
-        action: 'auth.change_password',
-        entityType: 'auth',
-        entityId: user.id,
-        summary: 'סיסמה עודכנה',
-        details: { email: user.email },
-      });
       return json({ ok: true });
     }
 
@@ -403,15 +377,6 @@ export async function onRequest(context) {
       const locale = requestLocale(request, body);
       const { token, expiresAt } = await createPreviewToken(db, user.id);
       const previewPath = locale === getDefaultLocale() ? '/' : `/${locale}/`;
-      await logAudit(db, {
-        actorUserId: user.id,
-        action: 'preview.create',
-        entityType: 'preview',
-        entityId: null,
-        locale,
-        summary: 'נוצר טוקן תצוגה מקדימה',
-        details: { expiresAt, locale },
-      });
       return json({
         token,
         expiresAt,
@@ -960,18 +925,30 @@ export async function onRequest(context) {
       const body = await readJson(request);
       if (!Array.isArray(body?.ids)) return badRequest('רשימת מזהים חסרה');
       const ids = body.ids.map((id) => Number(id)).filter(Boolean);
+      const { results: beforeRows } = await db
+        .prepare('SELECT id FROM portfolio_items ORDER BY sort_order ASC, id ASC')
+        .all();
+      const beforeIds = (beforeRows || []).map((row) => Number(row.id)).filter(Boolean);
       const stmts = ids.map((id, index) =>
         db.prepare('UPDATE portfolio_items SET sort_order = ? WHERE id = ?').bind(index + 1, id)
       );
       if (stmts.length) await db.batch(stmts);
-      await logAudit(db, {
-        actorUserId: user.id,
-        action: 'portfolio.reorder',
-        entityType: 'portfolio',
-        entityId: null,
-        summary: 'סדר תיק העבודות עודכן',
-        details: { ids },
-      });
+      const orderChanged =
+        beforeIds.length !== ids.length || beforeIds.some((id, index) => id !== ids[index]);
+      if (orderChanged) {
+        await logAudit(db, {
+          actorUserId: user.id,
+          action: 'portfolio.reorder',
+          entityType: 'portfolio',
+          entityId: null,
+          summary: 'סדר תיק העבודות עודכן',
+          details: {
+            fields: {
+              ids: { before: beforeIds, after: ids },
+            },
+          },
+        });
+      }
       return json({ ok: true, draftSaved: true });
     }
 

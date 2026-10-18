@@ -44,11 +44,12 @@ npm run dev
 
 ## Audit log
 
-פעולות אדמין משמעותיות נרשמות לטבלת `audit_log` (מי, פעולה, ישות, תקציר, diff ב־`details_json` כשיש).
+פעולות CMS מכוונות נרשמות לטבלת `audit_log` (מי, פעולה, ישות, תקציר, before/after ב־`details_json` כשיש).
+לא נרשמים auth/preview או bookkeeping אוטומטי של תרגומים - פירוט ב־`PROJECT-BOOTSTRAP.md`.
 קריאה: `GET /api/admin/audit` (מחוברים בלבד) ולשונית **היסטוריית שינויים** באדמין - קריאה בלבד, בלי מחיקה.
-Pagination: `limit` + `cursor` (id של הרשומה האחרונה). סינון: `action`, `entity_type`, `actor_user_id`, `from`, `to`.
-כתיבת Audit היא best-effort: כשל בכתיבה לא מפיל את ה־mutation (מתועד בלוג שרת).
-לא נשמרים סיסמאות, טוקנים או session; המפתחות הרגישים מרודקטים גם בקריאה. Migration: `migrations/004_audit_log.sql` (כלול גם ב־`schema.sql`).
+Pagination: `limit` + `cursor`. סינון: `action`, `entity_type`, `actor_user_id`, `from`, `to`.
+ב־UI: תוויות ידידותיות, זמנים לפי שעון הקליינט, ובלוקי JSON ב־LTR.
+כתיבת Audit היא best-effort. Migrations: `004_audit_log.sql`, `009_purge_noise_audit.sql`, `010_purge_translation_audit.sql`.
 
 בדיקה מקומית מבודדת (יוצרת D1 נפרד ב־`.wrangler/state-audit-test` + שרת זמני על פורט 8799; לא נוגעת ב־`.wrangler/state` ולא ב־remote):
 
@@ -58,12 +59,14 @@ npm run test:audit
 
 ## Cloudflare (פריסה)
 
+המסלול המועדף: חברו את פרויקט Pages ל־Git ב־Dashboard של Cloudflare (Git Provider). Push ל־`main` מפעיל deploy אוטומטי. אל תשתמשו ב־GitHub Actions ל־deploy. `npm run deploy` נשאר כגיבוי ידני.
+
 1. צרו D1 בשם `cms-template` ועדכנו `database_id` ב־`wrangler.toml`.
 2. צרו R2 bucket בשם `cms-template-media` (או עדכנו את השם ב־toml).
 3. `npm run db:migrate:remote` ואז seed מרחוק **רק במפורש**:
    `ALLOW_DEMO_REMOTE_SEED=1 npm run db:seed:remote`
    (בלי המשתנה הפקודה נחסמת - כדי ש־CI/deploy לא יזרעו סיסמת דמו בטעות.)
-4. העלו מדיה: `npm run r2:create` (אם צריך) → `npm run r2:sync` → `npm run deploy`.
+4. העלו מדיה: `npm run r2:create` (אם צריך) → `npm run r2:sync` → חברו Git או `npm run deploy`.
 5. **חובה אחרי seed מרחוק:** התחברו לאדמין והחליפו את סיסמת הדמו לסיסמה חזקה ייחודית. אל תעלו אתר חי עם סיסמת הדמו. בהתחברות עם סיסמת הדמו האדמין יפנה אוטומטית ללשונית סיסמה; אי אפשר לשמור מחדש את סיסמת הדמו.
 6. **אל תגדירו** `ALLOW_DEMO_REMOTE_SEED` ב־CI או בסקריפטי deploy.
 

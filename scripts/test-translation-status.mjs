@@ -506,11 +506,6 @@ async function runMulti() {
         expectedSourceRevisions: he.data.sourceRevisions,
       },
     });
-    const beforeAudits = d1Query(
-      `SELECT COUNT(*) AS c FROM audit_log WHERE action='translation.acknowledge'`
-    );
-    const countBefore = Number(beforeAudits[0]?.c || 0);
-
     const ack1 = await req('/api/admin/translations/acknowledge', {
       method: 'POST',
       origin: true,
@@ -533,16 +528,22 @@ async function runMulti() {
       origin: true,
       body: { entityType: 'site_content', entityId: 'hero_title', locale: 'en' },
     });
-    const afterAudits = d1Query(
+    const st2 = await statusFor('site_content', 'hero_title', 'en');
+    const noiseAck = d1Query(
       `SELECT COUNT(*) AS c FROM audit_log WHERE action='translation.acknowledge'`
     );
-    const countAfter = Number(afterAudits[0]?.c || 0);
-    if (ack2.res.ok && ack2.data?.idempotent === true && countAfter === countBefore + 1) {
-      pass('14', 'acknowledge is idempotent (no duplicate audit)');
+    const noiseCount = Number(noiseAck[0]?.c || 0);
+    if (
+      ack2.res.ok &&
+      ack2.data?.idempotent === true &&
+      st2?.reviewStatus === 'acknowledged' &&
+      noiseCount === 0
+    ) {
+      pass('14', 'acknowledge is idempotent and not audited');
     } else {
       fail(
         '14',
-        `idempotent=${ack2.data?.idempotent} audits ${countBefore}→${countAfter}`
+        `idempotent=${ack2.data?.idempotent} review=${st2?.reviewStatus} audits=${noiseCount}`
       );
     }
   }

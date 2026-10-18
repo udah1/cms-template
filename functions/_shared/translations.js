@@ -7,7 +7,6 @@
  * public/admin/ui-i18n.js. When CMS editors are added, wire them through the same
  * assertExpectedSourceRevision → write → bump/mark helpers.
  */
-import { logAudit } from './audit.js';
 import { getContentMap, getPortfolio, getPublishedPayload, getServices, getSystemMessages } from './content.js';
 import { getDefaultLocale, getLocales, isMultilingual, matchEnabledLocale, resolveLocale } from './i18n.js';
 
@@ -29,7 +28,7 @@ export const TRANSLATED_FIELDS = Object.freeze({
 /** Base / shared fields that must NOT bump source revision. */
 export const NON_TRANSLATED_FIELDS = Object.freeze({
   service: ['sort_order', 'visible'],
-  portfolio_item: ['media_type', 'media_url', 'cover_url', 'sort_order', 'visible', 'featured'],
+  portfolio_item: ['media_type', 'media_url', 'cover_url', 'external_url', 'sort_order', 'visible', 'featured'],
 });
 
 export function isValidEntityType(value) {
@@ -292,15 +291,16 @@ export async function assertExpectedSourceRevision(db, entityType, entityId, exp
 
 /**
  * Mark non-source locales outdated for a new source revision.
- * Uses set-based UPDATEs (batch-friendly) then best-effort audit.
+ * Uses set-based UPDATEs (batch-friendly). No audit - bookkeeping only;
+ * the source content mutation is already logged (e.g. content.update).
  */
-export async function markTranslationsOutdated(db, entityType, entityId, newRevision, actorUserId = null) {
+export async function markTranslationsOutdated(db, entityType, entityId, newRevision, _actorUserId = null) {
   const sourceLocale = getDefaultLocale();
   const id = normId(entityId);
 
   const { results: beforeRows } = await db
     .prepare(
-      `SELECT locale, freshness_status, translated_from_revision, review_status
+      `SELECT locale
        FROM translation_status
        WHERE entity_type = ? AND entity_id = ? AND locale != ?
          AND freshness_status != 'missing'
@@ -342,28 +342,7 @@ export async function markTranslationsOutdated(db, entityType, entityId, newRevi
       .bind(newRevision, entityType, id, sourceLocale),
   ]);
 
-  const marked = [];
-  for (const row of beforeRows || []) {
-    marked.push(row.locale);
-    if (row.review_status !== 'normal' || row.freshness_status !== 'outdated') {
-      await logAudit(db, {
-        actorUserId,
-        action: 'translation.status_changed',
-        entityType,
-        entityId: id,
-        locale: row.locale,
-        summary: `תרגום סומן כ־outdated (${entityType}:${id})`,
-        details: {
-          freshnessStatus: { before: row.freshness_status, after: 'outdated' },
-          reviewStatus: { before: row.review_status, after: 'normal' },
-          sourceRevision: newRevision,
-          translatedFromRevision: Number(row.translated_from_revision),
-        },
-      });
-    }
-  }
-
-  return marked;
+  return (beforeRows || []).map((row) => row.locale);
 }
 
 /**
@@ -490,45 +469,10 @@ export function buildCasBumpStatements(db, { entityType, entityId, expectedRevis
   };
 }
 
-async function auditBumpResult(db, { entityType, id, sourceLocale, expected, newRevision, beforeRows, actorUserId, skipAudit }) {
-  for (const row of beforeRows || []) {
-    if (row.review_status !== 'normal' || row.freshness_status !== 'outdated') {
-      await logAudit(db, {
-        actorUserId,
-        action: 'translation.status_changed',
-        entityType,
-        entityId: id,
-        locale: row.locale,
-        summary: `תרגום סומן כ־outdated (${entityType}:${id})`,
-        details: {
-          freshnessStatus: { before: row.freshness_status, after: 'outdated' },
-          reviewStatus: { before: row.review_status, after: 'normal' },
-          sourceRevision: newRevision,
-          translatedFromRevision: Number(row.translated_from_revision),
-        },
-      });
-    }
-  }
-
-  if (!skipAudit) {
-    await logAudit(db, {
-      actorUserId,
-      action: 'source.revision_bumped',
-      entityType,
-      entityId: id,
-      locale: sourceLocale,
-      summary: `גרסת מקור עלתה ל־${newRevision} (${entityType}:${id})`,
-      details: {
-        revision: { before: expected, after: newRevision },
-        markedOutdatedLocales: (beforeRows || []).map((r) => r.locale),
-      },
-    });
-  }
-}
-
 /**
  * Compare-and-set bump of source revision. Never decreases.
  * CAS UPDATE and status fan-out run in the same D1 batch (not sequential).
+ * Freshness fan-out is not audited - source content mutations already are.
  * @returns {{ revision: number, markedLocales: string[], bumped: boolean }}
  */
 export async function bumpSourceRevision(db, opts) {
@@ -537,7 +481,6 @@ export async function bumpSourceRevision(db, opts) {
     entityId,
     expectedRevision = null,
     actorUserId = null,
-    skipAudit = false,
   } = opts || {};
   if (!isValidEntityType(entityType)) {
     const err = new Error('entity_type לא תקין');
@@ -551,7 +494,7 @@ export async function bumpSourceRevision(db, opts) {
 
   const { results: beforeRows } = await db
     .prepare(
-      `SELECT locale, freshness_status, translated_from_revision, review_status
+      `SELECT locale
        FROM translation_status
        WHERE entity_type = ? AND entity_id = ? AND locale != ?
          AND freshness_status != 'missing'
@@ -579,16 +522,6 @@ export async function bumpSourceRevision(db, opts) {
   }
 
   await reconcileEntityStatuses(db, entityType, id, actorUserId);
-  await auditBumpResult(db, {
-    entityType,
-    id,
-    sourceLocale,
-    expected,
-    newRevision,
-    beforeRows,
-    actorUserId,
-    skipAudit,
-  });
 
   return {
     revision: newRevision,
@@ -637,23 +570,12 @@ export async function commitDraftWritesWithSourceBumps(db, opts) {
       expectedRevision: expected,
       sourceLocale,
     });
-    const { results: beforeRows } = await db
-      .prepare(
-        `SELECT locale, freshness_status, translated_from_revision, review_status
-         FROM translation_status
-         WHERE entity_type = ? AND entity_id = ? AND locale != ?
-           AND freshness_status != 'missing'
-           AND translated_from_revision < ?`
-      )
-      .bind(bump.entityType, id, sourceLocale, built.newRevision)
-      .all();
     bumpMeta.push({
       entityType: bump.entityType,
       entityId: id,
       expected,
       newRevision: built.newRevision,
       sourceLocale,
-      beforeRows: beforeRows || [],
     });
     bumpStatements.push(...built.statements);
   }
@@ -677,16 +599,6 @@ export async function commitDraftWritesWithSourceBumps(db, opts) {
         throw err;
       }
       await reconcileEntityStatuses(db, meta.entityType, meta.entityId, actorUserId);
-      await auditBumpResult(db, {
-        entityType: meta.entityType,
-        id: meta.entityId,
-        sourceLocale: meta.sourceLocale,
-        expected: meta.expected,
-        newRevision: meta.newRevision,
-        beforeRows: meta.beforeRows,
-        actorUserId,
-        skipAudit: false,
-      });
     }
   }
 
@@ -715,7 +627,6 @@ export async function markTranslationCurrent(db, opts) {
     entityId,
     locale,
     expectedSourceRevision,
-    actorUserId = null,
   } = opts || {};
   const resolved = matchEnabledLocale(locale);
   if (!resolved) {
@@ -740,14 +651,6 @@ export async function markTranslationCurrent(db, opts) {
     err.expectedRevision = expected;
     throw err;
   }
-
-  const before = await db
-    .prepare(
-      `SELECT freshness_status, review_status FROM translation_status
-       WHERE entity_type = ? AND entity_id = ? AND locale = ?`
-    )
-    .bind(entityType, id, resolved)
-    .first();
 
   // CAS: only mark current while source revision is still the expected value.
   const result = await db
@@ -792,21 +695,6 @@ export async function markTranslationCurrent(db, opts) {
     err.currentRevision = sourceRev;
     err.expectedRevision = expected;
     throw err;
-  }
-
-  if (before && before.freshness_status !== 'current' && resolved !== sourceLocale) {
-    await logAudit(db, {
-      actorUserId,
-      action: 'translation.status_changed',
-      entityType,
-      entityId: id,
-      locale: resolved,
-      summary: `תרגום עודכן ל־current (${entityType}:${id})`,
-      details: {
-        freshnessStatus: { before: before.freshness_status, after: 'current' },
-        sourceRevision: expected,
-      },
-    });
   }
 
   return { freshnessStatus: 'current', sourceRevision: expected };
@@ -902,19 +790,6 @@ export async function acknowledgeTranslation(db, opts) {
     )
     .bind(entityType, id, resolved)
     .first();
-
-  await logAudit(db, {
-    actorUserId,
-    action: 'translation.acknowledge',
-    entityType,
-    entityId: id,
-    locale: resolved,
-    summary: `תרגום סומן כטופל (${entityType}:${id})`,
-    details: {
-      freshnessStatus: 'outdated',
-      reviewStatus: { before: 'normal', after: 'acknowledged' },
-    },
-  });
 
   return {
     ok: true,
@@ -1362,21 +1237,6 @@ export async function recomputeLocaleFreshness(db, locale, actorUserId = null) {
         resolved
       )
       .run();
-
-    if (row.freshness_status !== nextFreshness) {
-      await logAudit(db, {
-        actorUserId,
-        action: 'translation.status_changed',
-        entityType: row.entity_type,
-        entityId: row.entity_id,
-        locale: resolved,
-        summary: `רענון freshness אחרי rollback → ${nextFreshness}`,
-        details: {
-          freshnessStatus: { before: row.freshness_status, after: nextFreshness },
-          sourceRevision: sourceRev,
-        },
-      });
-    }
   }
 }
 

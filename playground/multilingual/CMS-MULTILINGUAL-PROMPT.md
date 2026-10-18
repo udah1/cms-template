@@ -184,7 +184,7 @@ site_content
 - לכל `site_version` יש `locale`.
 - `site_publish_state` נשמר לפי locale, ולא כרשומה גלובלית יחידה.
 - `published_version_id`, `previous_version_id` ו־`publishing` אינם מערבבים בין שפות.
-- `audit_log` כולל locale כאשר הפעולה קשורה לתוכן או לגרסה.
+- `audit_log` כולל locale כאשר הפעולה קשורה לתוכן או לגרסה. יומן ה־CMS מתעד שינויי תוכן/Publish בלבד - לא auth/preview ולא bookkeeping אוטומטי של freshness/outdated (פירוט ב־`PROJECT-BOOTSTRAP.md`).
 - Publish של שפה אחת אינו משנה את ה־published state של שפה אחרת.
 
 Payload מפורסם חייב להיות snapshot מלא ומבודד של locale יחיד, ולא אוסף ערכים שמתמזג בזמן הבקשה:

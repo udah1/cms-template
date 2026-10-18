@@ -725,6 +725,15 @@ video.preview-media {
   margin: 0 0 8px;
   font-size: 14px;
 }
+/* Code / JSON always LTR, even when the admin UI is RTL. */
+pre,
+code,
+.audit-diff {
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: left;
+}
+
 .audit-diff {
   margin: 0;
   padding: 10px 12px;

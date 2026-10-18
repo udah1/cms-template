@@ -246,11 +246,26 @@ async function main() {
     fail('A11', JSON.stringify({ svc: svc.data, audit: afterSvc.data }));
   }
 
-  const authLogin = await req('/api/admin/audit?action=auth.login&limit=5');
-  if ((authLogin.data?.items || []).some((r) => r.action === 'auth.login')) {
-    pass('A12', 'auth.login recorded without credentials');
+  // Login already ran above; also exercise preview-token. Neither should appear in audit.
+  const previewTok = await req('/api/admin/preview-token', {
+    method: 'POST',
+    origin: true,
+    body: {},
+  });
+  if (!previewTok.res.ok) {
+    fail('A12', 'preview-token failed: ' + JSON.stringify(previewTok.data));
   } else {
-    fail('A12', 'auth.login missing');
+    const noiseAuth = await req('/api/admin/audit?action=auth.login&limit=5');
+    const noisePreview = await req('/api/admin/audit?action=preview.create&limit=5');
+    const hasAuthNoise = (noiseAuth.data?.items || []).some((r) => r.action === 'auth.login');
+    const hasPreviewNoise = (noisePreview.data?.items || []).some(
+      (r) => r.action === 'preview.create'
+    );
+    if (!hasAuthNoise && !hasPreviewNoise) {
+      pass('A12', 'auth/preview actions are not recorded in audit');
+    } else {
+      fail('A12', JSON.stringify({ auth: noiseAuth.data, preview: noisePreview.data }));
+    }
   }
 
   const failed = results.filter((r) => !r.ok);

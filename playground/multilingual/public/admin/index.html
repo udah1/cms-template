@@ -26,7 +26,7 @@
         <label><span data-i18n="login.password">סיסמה</span><input name="password" type="password" autocomplete="current-password" required /></label>
         <label class="check login-remember">
           <input name="remember" type="checkbox" />
-          <span data-i18n="login.remember">זכור אותי לשנה</span>
+          <span data-i18n="login.remember">זכור אותי</span>
         </label>
         <p id="loginError" class="error" hidden></p>
         <button type="submit" class="btn" data-i18n="login.submit">התחברות</button>
@@ -143,36 +143,30 @@
             <label><span data-i18n="audit.action">פעולה</span>
               <select name="action" id="auditActionFilter">
                 <option value="" data-i18n="audit.all">הכל</option>
-                <option value="content.update">content.update</option>
-                <option value="service.create">service.create</option>
-                <option value="service.update">service.update</option>
-                <option value="service.delete">service.delete</option>
-                <option value="portfolio.create">portfolio.create</option>
-                <option value="portfolio.update">portfolio.update</option>
-                <option value="portfolio.delete">portfolio.delete</option>
-                <option value="portfolio.reorder">portfolio.reorder</option>
-                <option value="media.upload">media.upload</option>
-                <option value="media.delete">media.delete</option>
-                <option value="preview.create">preview.create</option>
-                <option value="publish.succeeded">publish.succeeded</option>
-                <option value="publish.failed">publish.failed</option>
-                <option value="rollback.succeeded">rollback.succeeded</option>
-                <option value="rollback.failed">rollback.failed</option>
-                <option value="auth.login">auth.login</option>
-                <option value="auth.logout">auth.logout</option>
-                <option value="auth.change_password">auth.change_password</option>
+                <option value="content.update" data-i18n="audit.actionLabel.content.update">עדכון תוכן</option>
+                <option value="service.create" data-i18n="audit.actionLabel.service.create">יצירת שירות</option>
+                <option value="service.update" data-i18n="audit.actionLabel.service.update">עדכון שירות</option>
+                <option value="service.delete" data-i18n="audit.actionLabel.service.delete">מחיקת שירות</option>
+                <option value="portfolio.create" data-i18n="audit.actionLabel.portfolio.create">יצירת פריט בתיק עבודות</option>
+                <option value="portfolio.update" data-i18n="audit.actionLabel.portfolio.update">עדכון פריט בתיק עבודות</option>
+                <option value="portfolio.delete" data-i18n="audit.actionLabel.portfolio.delete">מחיקת פריט בתיק עבודות</option>
+                <option value="portfolio.reorder" data-i18n="audit.actionLabel.portfolio.reorder">שינוי סדר תיק עבודות</option>
+                <option value="media.upload" data-i18n="audit.actionLabel.media.upload">העלאת מדיה</option>
+                <option value="media.delete" data-i18n="audit.actionLabel.media.delete">מחיקת מדיה</option>
+                <option value="publish.succeeded" data-i18n="audit.actionLabel.publish.succeeded">פרסום הצליח</option>
+                <option value="publish.failed" data-i18n="audit.actionLabel.publish.failed">פרסום נכשל</option>
+                <option value="rollback.succeeded" data-i18n="audit.actionLabel.rollback.succeeded">שחזור הצליח</option>
+                <option value="rollback.failed" data-i18n="audit.actionLabel.rollback.failed">שחזור נכשל</option>
               </select>
             </label>
             <label><span data-i18n="audit.entityType">סוג ישות</span>
               <select name="entity_type" id="auditEntityFilter">
                 <option value="" data-i18n="audit.all">הכל</option>
-                <option value="content">content</option>
-                <option value="service">service</option>
-                <option value="portfolio">portfolio</option>
-                <option value="media">media</option>
-                <option value="preview">preview</option>
-                <option value="version">version</option>
-                <option value="auth">auth</option>
+                <option value="content" data-i18n="audit.entityLabel.content">תוכן</option>
+                <option value="service" data-i18n="audit.entityLabel.service">שירות</option>
+                <option value="portfolio" data-i18n="audit.entityLabel.portfolio">תיק עבודות</option>
+                <option value="media" data-i18n="audit.entityLabel.media">מדיה</option>
+                <option value="version" data-i18n="audit.entityLabel.version">גרסה</option>
               </select>
             </label>
             <label><span data-i18n="audit.from">מתאריך</span>

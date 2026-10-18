@@ -395,6 +395,36 @@ const saveContentBtn = document.getElementById('saveContentBtn');
 const saveBarHint = document.getElementById('saveBarHint');
 let savedSnapshot = '';
 let activeTab = 'content';
+let applyingTabFromUrl = false;
+
+function knownAdminTabs() {
+  return [...document.querySelectorAll('.tab[data-tab]')].map((tab) => tab.dataset.tab);
+}
+
+function parseTabFromHash() {
+  const raw = (location.hash || '').replace(/^#/, '').trim().toLowerCase();
+  return raw || null;
+}
+
+/** Resolve a tab id to one that is allowed right now (hidden translations → content). */
+function resolveAdminTab(name) {
+  const tab = String(name || '').trim();
+  const known = knownAdminTabs();
+  if (!known.includes(tab)) return 'content';
+  if (tab === 'translations' && !isMultilingualUi()) return 'content';
+  return tab;
+}
+
+function syncTabHash(tab, { replace = false } = {}) {
+  const next = `#${tab}`;
+  if (location.hash === next) return;
+  if (replace) {
+    const url = `${location.pathname}${location.search}${next}`;
+    history.replaceState(null, '', url);
+  } else {
+    location.hash = tab;
+  }
+}
 
 function collectContentDraft() {
   const content = {};
@@ -427,23 +457,42 @@ function markContentClean() {
   updateSaveBar();
 }
 
-function switchTab(name) {
-  activeTab = name;
-  document.querySelectorAll('.tab').forEach((tab) => {
-    tab.classList.toggle('active', tab.dataset.tab === name);
+function switchTab(name, { fromUrl = false, replaceHash = false } = {}) {
+  const tab = resolveAdminTab(name);
+  const same = tab === activeTab;
+  activeTab = tab;
+  document.querySelectorAll('.tab').forEach((el) => {
+    el.classList.toggle('active', el.dataset.tab === tab);
   });
   document.querySelectorAll('.panel').forEach((panel) => {
-    panel.classList.toggle('hidden', panel.id !== `tab-${name}`);
+    panel.classList.toggle('hidden', panel.id !== `tab-${tab}`);
   });
-  saveBar.hidden = name !== 'content';
-  if (name === 'audit') {
-    loadAuditLog({ reset: true }).catch((err) => {
-      const status = document.getElementById('auditStatus');
-      if (status) showStatus(status, err.message || tt('audit.loadFailed'), true);
-    });
+  saveBar.hidden = tab !== 'content';
+  if (!same) {
+    if (tab === 'audit') {
+      loadAuditLog({ reset: true }).catch((err) => {
+        const status = document.getElementById('auditStatus');
+        if (status) showStatus(status, err.message || tt('audit.loadFailed'), true);
+      });
+    }
+    if (tab === 'translations') {
+      loadTranslationsPanel().catch(() => {});
+    }
   }
-  if (name === 'translations') {
-    loadTranslationsPanel().catch(() => {});
+  if (!fromUrl || location.hash !== `#${tab}`) {
+    syncTabHash(tab, { replace: fromUrl || replaceHash });
+  }
+}
+
+function applyTabFromUrl() {
+  if (appView.classList.contains('hidden')) return;
+  const requested = parseTabFromHash();
+  const tab = resolveAdminTab(requested || 'content');
+  applyingTabFromUrl = true;
+  try {
+    switchTab(tab, { fromUrl: true });
+  } finally {
+    applyingTabFromUrl = false;
   }
 }
 
@@ -841,8 +890,10 @@ async function enterApp(email, { mustChangePassword = false } = {}) {
     showStatus(publishMessage, err.message, true);
   }
   if (mustChangePassword) {
-    switchTab('password');
+    switchTab('password', { replaceHash: true });
     showStatus(document.getElementById('passwordStatus'), tt('password.demoWarning'), true);
+  } else {
+    applyTabFromUrl();
   }
 }
 
@@ -890,7 +941,15 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 });
 
 document.querySelectorAll('.tab').forEach((tab) => {
-  tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+  tab.addEventListener('click', () => {
+    if (applyingTabFromUrl) return;
+    switchTab(tab.dataset.tab);
+  });
+});
+
+window.addEventListener('hashchange', () => {
+  if (applyingTabFromUrl) return;
+  applyTabFromUrl();
 });
 
 document.getElementById('tab-content').addEventListener('input', updateSaveBar);
@@ -1688,6 +1747,9 @@ function switchAdminLocale(nextLocale) {
   renderPortfolio();
   updateSaveBar();
   refreshPublishStatus().catch(() => {});
+  if (activeTab === 'audit') {
+    loadAuditLog({ reset: true }).catch(() => {});
+  }
 }
 
 document.getElementById('adminLocaleSelect')?.addEventListener('change', (event) => {
@@ -1738,7 +1800,7 @@ function formatAuditDetails(details) {
 }
 
 function stringifyAuditValue(value) {
-  if (value == null) return '—';
+  if (value == null) return '-';
   if (typeof value === 'object') {
     try {
       return JSON.stringify(value);
@@ -1747,7 +1809,41 @@ function stringifyAuditValue(value) {
     }
   }
   const text = String(value);
-  return text.length ? text : '—';
+  return text.length ? text : '-';
+}
+
+function formatAuditWhen(value) {
+  if (!value) return '-';
+  const raw = String(value).includes('T') ? String(value) : `${String(value).replace(' ', 'T')}Z`;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return String(value);
+  try {
+    return new Intl.DateTimeFormat(adminLocale === 'en' ? 'en-GB' : 'he-IL', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    }).format(date);
+  } catch {
+    return date.toLocaleString();
+  }
+}
+
+function auditActionLabel(action) {
+  if (!action) return '-';
+  return tt(`audit.actionLabel.${action}`) || action;
+}
+
+function auditEntityLabel(entityType) {
+  if (!entityType) return '-';
+  return tt(`audit.entityLabel.${entityType}`) || entityType;
+}
+
+function formatAuditEntity(item) {
+  const typeLabel = item.entityType ? auditEntityLabel(item.entityType) : '';
+  const id = item.entityId != null && item.entityId !== '' ? String(item.entityId) : '';
+  if (typeLabel && id) return `${typeLabel} · ${id}`;
+  if (typeLabel) return typeLabel;
+  if (id) return id;
+  return '-';
 }
 
 function renderAuditItems(items, { append }) {
@@ -1755,10 +1851,11 @@ function renderAuditItems(items, { append }) {
   if (!list) return;
   const html = (items || [])
     .map((item) => {
-      const when = item.createdAt ? escapeHtml(item.createdAt) : '—';
-      const user = escapeHtml(item.actorEmail || (item.actorUserId ? `#${item.actorUserId}` : '—'));
-      const action = escapeHtml(item.action || '');
-      const entity = escapeHtml([item.entityType, item.entityId].filter(Boolean).join(' · ') || '—');
+      const whenRaw = item.createdAt ? String(item.createdAt) : '';
+      const whenLabel = whenRaw ? formatAuditWhen(whenRaw) : '-';
+      const user = escapeHtml(item.actorEmail || (item.actorUserId ? `#${item.actorUserId}` : '-'));
+      const action = escapeHtml(auditActionLabel(item.action));
+      const entity = escapeHtml(formatAuditEntity(item));
       const summary = escapeHtml(item.summary || '');
       const ok = item.success !== false;
       const badge = ok
@@ -1766,11 +1863,11 @@ function renderAuditItems(items, { append }) {
         : `<span class="audit-badge is-fail">${tt('audit.fail')}</span>`;
       const detailsText = formatAuditDetails(item.details);
       const detailsBlock = detailsText
-        ? `<pre class="audit-diff">${escapeHtml(detailsText)}</pre>`
+        ? `<pre class="audit-diff" dir="ltr">${escapeHtml(detailsText)}</pre>`
         : '';
       return `<article class="audit-row">
         <div class="audit-row-head">
-          <time datetime="${when}">${when}</time>
+          <time datetime="${escapeAttr(whenRaw)}">${escapeHtml(whenLabel)}</time>
           <span class="audit-action">${action}</span>
           ${badge}
         </div>

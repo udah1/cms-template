@@ -79,7 +79,7 @@ PROJECT-BOOTSTRAP.md
 
 היעד:
 - ליצור repository עצמאי ונקי.
-- לחבר Cloudflare Pages, D1 ו־R2 ייעודיים לפרויקט.
+- לחבר Cloudflare Pages (עם Git Provider ב־Dashboard, לא GitHub Actions), D1 ו־R2 ייעודיים לפרויקט.
 - להסיר כל תוכן, מדיה, URL, ID, credential או brand של פרויקט אחר.
 - להשלים תוכן, SEO, SSR, CMS, Preview, Publish, Rollback ו־Audit Log.
 - להשאיר את הפרויקט מוכן ל־Preview ולמסירה.
@@ -125,16 +125,22 @@ PROJECT-BOOTSTRAP.md
 6. אמת Draft → Preview → Publish → Rollback.
 7. אמת Login, Logout, Change Password, CSRF, rate limiting והעלאת מדיה.
 8. אמת Audit Log:
-   - כתיבת אירועים.
-   - actor, פעולה, entity, זמן ו־before/after.
+   - כתיבת אירועי CMS בלבד (תוכן, שירותים, פורטפוליו, מדיה, Publish/Rollback).
+   - אין רישום של login / logout / change-password / יצירת Preview token / סימון outdated או acknowledge של תרגום.
+   - actor, פעולה, entity, זמן ו־before/after (כולל סדר תיק עבודות ב־`portfolio.reorder`).
    - Publish ו־Rollback.
    - API מוגן לקריאה.
-   - pagination וסינון.
+   - pagination וסינון (ערך יחיד לכל פילטר מספיק; אין חובה ל־multi-select).
+   - תוויות ידידותיות בעברית/אנגלית ב־UI (לא מפתחות טכניים גולמיים).
+   - זמנים לפי שעון הקליינט (לא מחרוזת UTC גולמית).
+   - בלוקי JSON/קוד ב־Admin תמיד LTR גם כשהממשק RTL.
    - redaction של סיסמאות וטוקנים.
-   - אין DELETE ל־Audit Logs.
+   - אין DELETE ל־Audit Logs מ־API.
    - UI לקריאה בלבד.
-9. חפש שאריות של הפרויקט המקורי: שמות, טלפונים, מיילים, URLs, מדיה, filenames ו־Cloudflare IDs.
-10. הרץ את בדיקות הקבלה רק מול סביבה מקומית מבודדת.
+9. אמת Admin UX בסיסי: הטאב הפעיל ב־`location.hash` (רענון ואחורה/קדימה משחזרים טאב).
+10. חבר את Pages ל־Git ב־Cloudflare Dashboard (Git Provider). אל תוסיף workflow של GitHub Actions ל־deploy.
+11. חפש שאריות של הפרויקט המקורי: שמות, טלפונים, מיילים, URLs, מדיה, filenames ו־Cloudflare IDs.
+12. הרץ את בדיקות הקבלה רק מול סביבה מקומית מבודדת.
 
 בדיקות מינימליות:
 - node --check לכל JavaScript שהשתנה.
@@ -196,7 +202,7 @@ PROJECT-BOOTSTRAP.md
 7. התאמת תוכן, SEO ומדיה דרך ה־CMS.
 8. בדיקות Draft → Preview → Publish → Rollback.
 9. בדיקות אבטחה, ניקיון Template ו־fallback.
-10. Preview deployment, בדיקה, ורק אז Production.
+10. חיבור Cloudflare Pages ל־Git (Dashboard), Preview deployment, בדיקה, ורק אז Production.
 
 ## זהות הפרויקט וה־bindings
 
@@ -218,6 +224,16 @@ PROJECT-BOOTSTRAP.md
 אפשר להשתמש ב־Dashboard או ב־Wrangler. יש ליצור משאבים ייעודיים לפרויקט החדש בלבד, ולא לשנות משאב קיים לפני אימות השם וה־ID.
 
 החלף placeholders ב־`wrangler.toml` רק לאחר יצירת D1 ו־R2. ודא שה־IDs שייכים לאותו חשבון ולסביבה הנכונה.
+
+## Deploy ל־Cloudflare Pages
+
+המסלול המועדף: **חיבור Git ב־Cloudflare Dashboard** (Pages → הפרויקט → Git Provider). אחרי החיבור, push ל־`main` מפעיל build/deploy אוטומטי ב־CF.
+
+- אל תשתמש ב־GitHub Actions ל־deploy של Template זה.
+- אל תשאיר secrets כמו `CLOUDFLARE_API_TOKEN` ב־GitHub אם אין workflow שצריך אותם.
+- `npm run deploy` (`wrangler pages deploy`) נשאר כגיבוי ידני בלבד - לא תחליף לחיבור Git.
+- Push ל־GitHub בלי build ב־Pages **אינו** מעלה את האתר. אמת ב־Dashboard ש־Git Provider = Yes וש־Production מצביע על הקומיט הנכון.
+- הגדרות build אופייניות: output directory = `public` (כמו `pages_build_output_dir` ב־`wrangler.toml`); Functions מתיקיית `functions/` בשורש הריפו.
 
 ## אתחול Database
 
@@ -304,7 +320,6 @@ Rollback אינו מוחק מדיה מ־R2. מחיקת מדיה צריכה לה�
 
 - שפת המקור היא `I18N.defaultLocale` ב־`functions/_shared/i18n.js` - לא מקובעת ב־migration וב־seed.
 - `seed.sql` רק מנקה את טבלאות ה־translation; השורות נוצרות ב־runtime דרך `ensureAllTranslationStatusRows()` לפי `defaultLocale` / `locales`.
-- `ensureAllTranslationStatusRows` רץ מטאב **תרגומים** (ולא מ־`GET admin/content` / publish status) - אחרת האדמין נתקע בעשרות שניות על אתרים רב־לשוניים. `listNeedingAttention` בנתיבים החמים משתמש ב־`ensure: false`.
 - שמירת Draft בשפת מקור: **optimistic locking** - CAS bump + fan-out סטטוסים קודם, ורק אז כתיבת התוכן (`commitDraftWritesWithSourceBumps`). `expectedSourceRevision` ישן → 409 בלי לדרוס תוכן חדש יותר (לא last-write-wins).
 - UI תרגומים מופיע באדמין רק כש־`locales.length > 1`.
 - `system_messages`: נתמכים ב־payload ובמעקב freshness; מסך עריכה באדמין אינו חלק מ־v1 (chrome נשאר ב־`ui-i18n.js`).
@@ -324,17 +339,31 @@ Rollback אינו מוחק מדיה מ־R2. מחיקת מדיה צריכה לה�
 
 ## Audit Log
 
-Audit Log נמצא ב־`migrations/004_audit_log.sql` ומשולב גם ב־`schema.sql`.
+Audit Log נמצא ב־`migrations/004_audit_log.sql` ומשולב גם ב־`schema.sql`. ניקוי רעש: `migrations/009_purge_noise_audit.sql`, `migrations/010_purge_translation_audit.sql`.
 
 הטבלה מתעדת משתמש, פעולה, סוג ישות, מזהה ישות, תקציר, `details_json` עם `before`/`after` כאשר רלוונטי, הצלחה/כישלון וזמן.
 
-פעולות שנרשמות כוללות שינויי תוכן (רק שדות ששונו, עם before/after), שירותים, תיק עבודות, העלאת/מחיקת מדיה, יצירת Preview token (בלי ערך הטוקן), Publish ו־Rollback (כולל כשלים עם `success = 0`), וכן `auth.login` / `auth.logout` / `auth.change_password` בלי credentials.
+**מה נרשם (פעולות CMS מכוונות):** שינויי תוכן (רק שדות ששונו, עם before/after), שירותים, תיק עבודות (כולל `portfolio.reorder` עם before/after לרשימת `ids`), העלאת מדיה, Publish ו־Rollback (כולל כשלים עם `success = 0`). מחיקת מדיה מפורשת / החלפת קובץ בפורטפוליו עשויה גם לרשום `media.delete`.
 
-קריאה: `GET /api/admin/audit` (דורש Admin מחובר; 401 בלי התחברות) ולשונית **היסטוריית שינויים** באדמין. Pagination עם `limit` + `cursor`, סינון לפי `action` / `entity_type` / `actor_user_id` / `from` / `to`. אין DELETE ל־audit_log. פרטי actor מוחזרים כ־email בלבד; מפתחות רגישים ב־details מרודקטים בשרת.
+**Before/after ב־details:** עדכוני תוכן/שירות/פורטפוליו ו־reorder משתמשים ב־`details.fields` עם `{ before, after }` לכל שדה ששונה. Create/delete שומרים בעיקר `after` או `before` בלבד; Publish/Rollback שומרים מזהי גרסאות.
+
+**מה לא נרשם:** `auth.login` / `auth.logout` / `auth.change_password` / `preview.create`, וכן bookkeeping אוטומטי של תרגומים (`translation.status_changed`, `source.revision_bumped`, `translation.acknowledge`). סטטוס freshness נשאר בטבלאות התרגום וב־UI; שינוי שפת מקור כבר מתועד כ־`content.update` (וכו'). אל תוסיף אותם חזרה בלי סיבה מפורשת.
+
+**גבול אפור (לבדיקה אם מרגיש רעש):** ב־`portfolio.update` / `portfolio.delete`, מחיקת קבצים מ־R2 רושמת גם `media.delete` בנוסף לאירוע הפורטפוליו. זה side-effect טכני; אם היומן נראה כפול - אפשר להשאיר את המחיקה רק ב־`details` של עדכון/מחיקת הפריט בלי שורת audit נפרדת.
+
+קריאה: `GET /api/admin/audit` (דורש Admin מחובר; 401 בלי התחברות) ולשונית **היסטוריית שינויים** באדמין. Pagination עם `limit` + `cursor`, סינון לפי `action` / `entity_type` / `actor_user_id` / `from` / `to` (ערך יחיד לכל פילטר). אין DELETE ל־audit_log מ־API. פרטי actor מוחזרים כ־email בלבד; מפתחות רגישים ב־details מרודקטים בשרת.
 
 מדיניות כתיבה: **best-effort**. כשל בכתיבת Audit לא מבטל את ה־mutation (Draft/Publish נשארים עקביים). אם בפרויקט לקוח נדרש Audit מחייב, יש לשנות במפורש את `logAudit` כך שיזרוק שגיאה.
 
 בדיקה מקומית מבודדת: `npm run test:audit` — מריצה מול `.wrangler/state-audit-test` ושרת זמני (לא מול `.wrangler/state` המשותף, לא remote/Production).
+
+## Admin UX (חובה ב־Template)
+
+- **טאבים ב־URL:** הטאב הפעיל מסונכרן ל־`location.hash` (`#content`, `#portfolio`, `#audit`, …). רענון ואחורה/קדימה בדפדפן משחזרים את הטאב. טאב `translations` מוסתר כשאין ריבוי שפות; כפיית `#password` נשארת כשסיסמת הדמו בתוקף.
+- **Audit UI:** מפתחות הפעולה/הישות ב־API נשארים טכניים; ב־UI מציגים תוויות ידידותיות מ־`ui-i18n` (עברית ואנגלית). אין להציג למשתמש מחרוזות כמו `publish.succeeded` כתווית ראשית.
+- **זמנים ביומן:** `created_at` נשמר ב־UTC ב־DB; בתצוגת Admin מציגים לפי שעון הדפדפן של הקליינט (`Intl` / `toLocaleString`, כמו בפניות). אין להציג את מחרוזת ה־UTC הגולמית כתווית ראשית.
+- **קוד/JSON:** אלמנטים `pre` / `code` / `.audit-diff` תמיד `direction: ltr` (גם כש־`html[dir=rtl]`), כדי שבלוקי JSON לא יישברו.
+- **זכור אותי:** תווית קצרה ("זכור אותי" / "Remember me"); משך הסשן עם הסימון נשאר ארוך (שנה) בקוד - אין חובה לציין את משך הזמן ב־UI.
 
 ## בדיקות לפני Deploy
 
@@ -393,7 +422,9 @@ git diff
 - SSR אומת בכל נתיבי הציבור.
 - Preview, Publish ו־Rollback עברו.
 - Login, CSRF ו־rate limiting עברו.
-- Audit writes עברו, ו־`GET /api/admin/audit` + לשונית היסטוריה + pagination/סינון עברו (`npm run test:audit`).
+- Audit writes עברו (CMS בלבד, בלי auth/preview/תרגום-אוטומטי), ו־`GET /api/admin/audit` + לשונית היסטוריה + pagination/סינון + תוויות ידידותיות עברו (`npm run test:audit`).
+- Admin: טאבים ב־hash, זמני audit לפי שעון הקליינט, ובלוקי JSON ב־LTR תחת RTL.
+- Cloudflare Pages מחובר ל־Git (Git Provider = Yes); אין workflow של GitHub Actions ל־deploy.
 - אין secrets או קבצי `.env` ב־Git.
 - כל בדיקות הקבלה עוברות.
 - יש Preview URL, Production URL ונוהל Rollback מתועדים.
