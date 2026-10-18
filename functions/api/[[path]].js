@@ -22,8 +22,8 @@ import {
   serviceRowForAudit,
 } from '../_shared/audit.js';
 import { getContentMap, getPortfolio, getPublishedPayload, getServices } from '../_shared/content.js';
-import { getDefaultLocale } from '../_shared/i18n.js';
-import { PORTFOLIO_CATEGORIES, categoriesToDb } from '../_shared/categories.js';
+import { getDefaultLocale, getLocales, matchEnabledLocale } from '../_shared/i18n.js';
+import { categoriesToDb, portfolioCategoriesForLocale } from '../_shared/categories.js';
 import { assertSameOrigin } from '../_shared/csrf.js';
 import {
   assertLoginAllowed,
@@ -49,6 +49,19 @@ const PREVIEW_ROBOTS = { 'X-Robots-Tag': 'noindex, nofollow, noarchive' };
 
 function siteOrigin(request) {
   return resolveSiteOrigin(request);
+}
+
+/**
+ * Admin/API locale resolver: unknown/missing → default locale (soft-fallback).
+ * Public HTML SSR must NOT use this for path locales; unknown path locales 404
+ * via middleware / resolveSsrPath when multilingual is enabled.
+ */
+function requestLocale(request, body) {
+  const url = new URL(request.url);
+  const fromQuery = url.searchParams.get('locale');
+  const fromBody = body && typeof body === 'object' ? body.locale : null;
+  const matched = matchEnabledLocale(fromQuery || fromBody);
+  return matched || getDefaultLocale();
 }
 
 function isLocalHost(request) {
@@ -90,14 +103,16 @@ export async function onRequest(context) {
   try {
     if (route === 'public/site' && method === 'GET') {
       const origin = siteOrigin(request);
-      await ensurePublishedBaseline(db, origin);
-      const published = await getPublishedPayload(db);
+      const locale = requestLocale(request);
+      await ensurePublishedBaseline(db, origin, null, locale);
+      const published = await getPublishedPayload(db, locale);
       if (!published) return badRequest('אין גרסה מפורסמת', 503);
       const { meta, jsonLd, versionId, publishedAt, ...payload } = published;
       // Rebuild schema with canonical host so pages.dev never leaks to crawlers.
       const liveJsonLd = buildJsonLd(payload, origin) || jsonLd || '';
       return json({
         ...payload,
+        locale,
         meta: meta || {},
         jsonLd: liveJsonLd,
         versionId,
@@ -107,6 +122,7 @@ export async function onRequest(context) {
 
     if (route === 'preview/site' && method === 'GET') {
       const token = url.searchParams.get('token') || '';
+      const locale = requestLocale(request);
       const sessionUser = await requireUser(db, request);
       if (token) {
         const tokenRow = await validatePreviewToken(db, token);
@@ -116,13 +132,14 @@ export async function onRequest(context) {
       } else if (!sessionUser) {
         return json({ error: 'אין הרשאה לתצוגה מקדימה' }, 401, PREVIEW_ROBOTS);
       }
-      const payload = await getDraftPublicPayload(db);
+      const payload = await getDraftPublicPayload(db, locale);
       const origin = siteOrigin(request);
       const meta = buildMeta(payload);
       const jsonLd = buildJsonLd(payload, origin);
       return json(
         {
           ...payload,
+          locale,
           meta,
           jsonLd,
           preview: true,
@@ -256,8 +273,9 @@ export async function onRequest(context) {
     }
 
     if (route === 'admin/publish/status' && method === 'GET') {
-      await ensurePublishedBaseline(db, siteOrigin(request), user.id);
-      return json(await getPublishStatus(db));
+      const locale = requestLocale(request);
+      await ensurePublishedBaseline(db, siteOrigin(request), user.id, locale);
+      return json(await getPublishStatus(db, locale));
     }
 
     if (route === 'admin/upload' && method === 'POST') {
@@ -313,25 +331,31 @@ export async function onRequest(context) {
 
     if (route === 'admin/preview-token' && method === 'POST') {
       requireCsrf(request);
+      const body = await readJson(request);
+      const locale = requestLocale(request, body);
       const { token, expiresAt } = await createPreviewToken(db, user.id);
+      const previewPath = locale === getDefaultLocale() ? '/' : `/${locale}/`;
       await logAudit(db, {
         actorUserId: user.id,
         action: 'preview.create',
         entityType: 'preview',
         entityId: null,
+        locale,
         summary: 'נוצר טוקן תצוגה מקדימה',
-        details: { expiresAt },
+        details: { expiresAt, locale },
       });
       return json({
         token,
         expiresAt,
-        previewUrl: `/?preview=${encodeURIComponent(token)}`,
+        locale,
+        previewUrl: `${previewPath}?preview=${encodeURIComponent(token)}`,
       });
     }
 
     if (route === 'admin/publish' && method === 'POST') {
       requireCsrf(request);
       const body = await readJson(request);
+      const locale = requestLocale(request, body);
       const forceFail = !!(body?.forceFail && isLocalHost(request));
       try {
         const result = await publishFromDraft({
@@ -339,18 +363,19 @@ export async function onRequest(context) {
           userId: user.id,
           siteOrigin: siteOrigin(request),
           forceFail,
+          locale,
         });
         await logAudit(db, {
           actorUserId: user.id,
           action: 'publish.succeeded',
           entityType: 'version',
           entityId: result.versionId,
-          locale: result.locale || getDefaultLocale(),
+          locale: result.locale || locale,
           summary: 'פרסום הצליח',
           details: {
             versionId: result.versionId,
             previousVersionId: result.previousVersionId ?? null,
-            locale: result.locale || getDefaultLocale(),
+            locale: result.locale || locale,
           },
         });
         return json({ ok: true, ...result, status: 'Published' });
@@ -361,13 +386,13 @@ export async function onRequest(context) {
           action: 'publish.failed',
           entityType: 'version',
           entityId: err.versionId || null,
-          locale: getDefaultLocale(),
+          locale,
           summary: 'פרסום נכשל',
           details: {
             error: String(err.message || 'פרסום נכשל').slice(0, 500),
             versionId: err.versionId || null,
             conflict: status === 409,
-            locale: getDefaultLocale(),
+            locale,
           },
           success: false,
         });
@@ -385,19 +410,21 @@ export async function onRequest(context) {
 
     if (route === 'admin/rollback' && method === 'POST') {
       requireCsrf(request);
+      const body = await readJson(request);
+      const locale = requestLocale(request, body);
       try {
-        const result = await rollbackToPrevious(db, user.id, siteOrigin(request));
+        const result = await rollbackToPrevious(db, user.id, siteOrigin(request), locale);
         await logAudit(db, {
           actorUserId: user.id,
           action: 'rollback.succeeded',
           entityType: 'version',
           entityId: result.versionId,
-          locale: result.locale || getDefaultLocale(),
+          locale: result.locale || locale,
           summary: 'שחזור לגרסה קודמת הצליח',
           details: {
             versionId: result.versionId,
             previousVersionId: result.previousVersionId ?? null,
-            locale: result.locale || getDefaultLocale(),
+            locale: result.locale || locale,
           },
         });
         return json({ ok: true, ...result, status: 'Published' });
@@ -408,13 +435,13 @@ export async function onRequest(context) {
           action: 'rollback.failed',
           entityType: 'version',
           entityId: err.versionId || null,
-          locale: getDefaultLocale(),
+          locale,
           summary: 'שחזור לגרסה קודמת נכשל',
           details: {
             error: String(err.message || 'שחזור נכשל').slice(0, 500),
             versionId: err.versionId || null,
             conflict: status === 409,
-            locale: getDefaultLocale(),
+            locale,
           },
           success: false,
         });
@@ -431,9 +458,13 @@ export async function onRequest(context) {
     }
 
     if (route === 'admin/content' && method === 'GET') {
+      const locale = requestLocale(request);
       return json({
-        content: await getContentMap(db),
-        services: await getServices(db),
+        locale,
+        locales: getLocales(),
+        defaultLocale: getDefaultLocale(),
+        content: await getContentMap(db, locale),
+        services: await getServices(db, { locale }),
       });
     }
 
@@ -441,13 +472,13 @@ export async function onRequest(context) {
       requireCsrf(request);
       const body = await readJson(request);
       if (!body || typeof body !== 'object') return badRequest('גוף בקשה לא תקין');
+      const locale = requestLocale(request, body);
 
-      const beforeContent = await getContentMap(db);
-      const beforeServices = await getServices(db);
+      const beforeContent = await getContentMap(db, locale);
+      const beforeServices = await getServices(db, { locale });
       const beforeById = new Map(beforeServices.map((s) => [Number(s.id), s]));
 
       if (body.content && typeof body.content === 'object') {
-        const locale = getDefaultLocale();
         const stmts = Object.entries(body.content).map(([key, value]) =>
           db
             .prepare(
@@ -472,7 +503,6 @@ export async function onRequest(context) {
             visible: s.visible ? 1 : 0,
           };
           const diffs = prev ? diffService(prev, next) : null;
-          const locale = getDefaultLocale();
           await db
             .prepare(`UPDATE services SET sort_order = ?, visible = ? WHERE id = ?`)
             .bind(next.sort_order, next.visible, id)
@@ -505,9 +535,9 @@ export async function onRequest(context) {
             action: 'content.update',
             entityType: 'content',
             entityId: null,
-            locale: getDefaultLocale(),
+            locale,
             summary: `עודכנו ${changedKeys.length} שדות תוכן`,
-            details: { fields: contentDiffs },
+            details: { fields: contentDiffs, locale },
           });
         }
       }
@@ -519,9 +549,9 @@ export async function onRequest(context) {
           action: 'service.update',
           entityType: 'service',
           entityId: change.id,
-          locale: getDefaultLocale(),
+          locale,
           summary: `שירות #${change.id} עודכן`,
-          details: { fields: change.diffs, changedFields },
+          details: { fields: change.diffs, changedFields, locale },
         });
       }
 
@@ -535,11 +565,11 @@ export async function onRequest(context) {
         return badRequest(`ניתן להוסיף עד ${MAX_SERVICES} שירותים`);
       }
       const body = await readJson(request);
+      const locale = requestLocale(request, body);
       const max = await db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM services').first();
-      const title = String(body?.title || 'שירות חדש');
+      const title = String(body?.title || (locale === 'en' ? 'New service' : 'שירות חדש'));
       const description = String(body?.description || '');
       const sortOrder = (max?.m || 0) + 1;
-      const locale = getDefaultLocale();
       const result = await db
         .prepare(`INSERT INTO services (sort_order, visible) VALUES (?, ?)`)
         .bind(sortOrder, 1)
@@ -568,11 +598,12 @@ export async function onRequest(context) {
       requireCsrf(request);
       const id = Number(parts[2]);
       if (!id) return badRequest('מזהה לא תקין');
+      const locale = requestLocale(request);
       const countRow = await db.prepare('SELECT COUNT(*) AS c FROM services').first();
       if ((countRow?.c || 0) <= 1) {
         return badRequest('חייבים להשאיר לפחות שירות אחד');
       }
-      const services = await getServices(db);
+      const services = await getServices(db, { locale });
       const existing = services.find((s) => Number(s.id) === id) || null;
       await db.prepare('DELETE FROM services WHERE id = ?').bind(id).run();
       await logAudit(db, {
@@ -580,7 +611,7 @@ export async function onRequest(context) {
         action: 'service.delete',
         entityType: 'service',
         entityId: id,
-        locale: getDefaultLocale(),
+        locale,
         summary: `שירות #${id} נמחק`,
         details: { before: serviceRowForAudit(existing) },
       });
@@ -588,9 +619,11 @@ export async function onRequest(context) {
     }
 
     if (route === 'admin/portfolio' && method === 'GET') {
+      const locale = requestLocale(request);
       return json({
-        items: await getPortfolio(db),
-        categories: PORTFOLIO_CATEGORIES,
+        locale,
+        items: await getPortfolio(db, { locale }),
+        categories: portfolioCategoriesForLocale(locale),
       });
     }
 
@@ -598,7 +631,8 @@ export async function onRequest(context) {
       requireCsrf(request);
       const body = await readJson(request);
       if (!body) return badRequest('גוף בקשה לא תקין');
-      const { category, categories } = categoriesToDb(body.categories || body.category);
+      const locale = requestLocale(request, body);
+      const { category, categories } = categoriesToDb(body.categories || body.category, locale);
       const mediaType = body.media_type === 'video' ? 'video' : 'image';
       const max = await db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM portfolio_items').first();
       const sortOrder = (max?.m || 0) + 1;
@@ -614,7 +648,6 @@ export async function onRequest(context) {
         visible: body.visible === false ? 0 : 1,
         featured: body.featured ? 1 : 0,
       };
-      const locale = getDefaultLocale();
       const result = await db
         .prepare(
           `INSERT INTO portfolio_items
@@ -680,12 +713,12 @@ export async function onRequest(context) {
       if (!id) return badRequest('מזהה לא תקין');
       const body = await readJson(request);
       if (!body) return badRequest('גוף בקשה לא תקין');
-      const items = await getPortfolio(db);
+      const locale = requestLocale(request, body);
+      const items = await getPortfolio(db, { locale });
       const existing = items.find((p) => Number(p.id) === id) || null;
       if (!existing) return badRequest('פריט לא נמצא', 404);
-      const { category, categories } = categoriesToDb(body.categories || body.category);
+      const { category, categories } = categoriesToDb(body.categories || body.category, locale);
       const mediaType = body.media_type === 'video' ? 'video' : 'image';
-      const locale = getDefaultLocale();
       const next = {
         title: String(body.title || ''),
         category,
@@ -772,7 +805,8 @@ export async function onRequest(context) {
       requireCsrf(request);
       const id = Number(parts[2]);
       if (!id) return badRequest('מזהה לא תקין');
-      const items = await getPortfolio(db);
+      const locale = requestLocale(request);
+      const items = await getPortfolio(db, { locale });
       const existing = items.find((p) => Number(p.id) === id) || null;
       await db.prepare('DELETE FROM portfolio_items WHERE id = ?').bind(id).run();
       if (env.MEDIA && existing) {
@@ -789,7 +823,7 @@ export async function onRequest(context) {
         action: 'portfolio.delete',
         entityType: 'portfolio',
         entityId: id,
-        locale: getDefaultLocale(),
+        locale,
         summary: `פריט תיק עבודות #${id} נמחק`,
         details: { before: portfolioRowForAudit(existing) },
       });

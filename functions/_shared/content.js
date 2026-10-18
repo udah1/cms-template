@@ -57,7 +57,7 @@ export async function getPortfolio(
   `;
   const { results } = await db.prepare(sql).bind(resolved).all();
   return (results || []).map((row) => {
-    const categories = parseCategories(row);
+    const categories = parseCategories(row, resolved);
     return { ...row, categories, category: categories[0] };
   });
 }
@@ -78,7 +78,7 @@ export function publicPayload(content, services, portfolio, { locale = getDefaul
       id: p.id,
       title: p.title,
       category: p.category,
-      categories: p.categories || parseCategories(p),
+      categories: p.categories || parseCategories(p, resolved),
       media_type: p.media_type,
       media_url: p.media_url,
       cover_url: p.cover_url,
@@ -227,7 +227,7 @@ export async function restoreDraftFromPayload(db, payload) {
   for (let i = 0; i < portfolio.length; i++) {
     const p = portfolio[i];
     const id = Number(p.id) || i + 1;
-    const { category, categories } = categoriesToDb(p.categories || p.category);
+    const { category, categories } = categoriesToDb(p.categories || p.category, locale);
     const mediaType = p.media_type === 'video' ? 'video' : 'image';
     const sortOrder = Number(p.sort_order != null ? p.sort_order : i + 1);
     stmts.push(

@@ -27,6 +27,13 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') setMenuState(false);
 });
 
+document.querySelectorAll('[data-lang-switch]').forEach((select) => {
+  select.addEventListener('change', () => {
+    const href = select.value;
+    if (href) window.location.assign(href);
+  });
+});
+
 function setText(selector, value) {
   if (value == null || value === '') return;
   document.querySelectorAll(selector).forEach((el) => {
@@ -480,9 +487,11 @@ async function boot() {
   const previewToken = getPreviewToken();
   const ssrReady = document.documentElement.dataset.ssr === '1';
   try {
+    const locale = (document.documentElement.lang || 'he').trim() || 'he';
+    const localeQs = `locale=${encodeURIComponent(locale)}`;
     const endpoint = previewToken
-      ? `/api/preview/site?token=${encodeURIComponent(previewToken)}`
-      : '/api/public/site';
+      ? `/api/preview/site?token=${encodeURIComponent(previewToken)}&${localeQs}`
+      : `/api/public/site?${localeQs}`;
     const res = await fetch(endpoint, { credentials: 'same-origin' });
     if (!res.ok) throw new Error('api');
     const data = await res.json();

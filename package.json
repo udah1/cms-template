@@ -9,13 +9,17 @@
     "db:seed": "wrangler d1 execute cms-template --local --persist-to=.wrangler/state --file=./seed.sql",
     "db:reset": "rm -rf .wrangler/state/v3/d1 && npm run db:migrate && npm run db:seed",
     "db:migrate:remote": "wrangler d1 execute cms-template --remote --file=./schema.sql",
+    "db:migrate:locale-ready": "node scripts/migrate-005-locale-ready.mjs",
+    "test:migrate-005": "node scripts/test-migrate-005.mjs",
     "db:seed:remote": "node scripts/seed-remote.mjs",
     "deploy": "wrangler pages deploy public --project-name=cms-template --branch=main",
     "r2:create": "wrangler r2 bucket create cms-template-media",
     "r2:sync": "bash scripts/sync-media-to-r2.sh",
     "test:acceptance": "node scripts/acceptance-publish.mjs",
     "test:audit": "node scripts/run-audit-tests.mjs",
-    "test:ssr": "node scripts/acceptance-ssr.mjs"
+    "test:ssr": "node scripts/acceptance-ssr.mjs",
+    "test:admin-i18n": "node scripts/test-admin-i18n.mjs",
+    "test:admin-i18n:api": "node scripts/run-admin-i18n-api.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.40.0"

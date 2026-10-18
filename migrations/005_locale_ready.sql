@@ -1,6 +1,24 @@
 -- Upgrade path from pre-locale schema to locale-ready (defaultLocale = he).
 -- Greenfield: use schema.sql via npm run db:migrate / db:reset.
--- Run once on an existing DB. Not idempotent — do not re-run after success.
+--
+-- DO NOT run this file directly with `wrangler d1 execute --file=...` on a live DB
+-- that may already be mid-upgrade. D1/SQLite DDL across DROP/ALTER is not one
+-- atomic transaction; a mid-failure leaves a partial schema.
+--
+-- Supported upgrade (resume-safe, re-runnable after partial failure):
+--   npm run db:migrate:locale-ready
+--   npm run db:migrate:locale-ready -- --remote
+--
+-- The runner (scripts/migrate-005-locale-ready.mjs):
+--   - inspects live schema per step and skips completed work
+--   - resumes from filled *_mig tables if the source was already DROPped
+--   - never drops a *_mig table that may be the only data copy
+--   - re-runs safely until the DB is fully locale-ready
+-- Verify: npm run test:migrate-005 (isolated D1 under .wrangler/state-migrate-005-test)
+--
+-- The SQL below is the logical transform for review / offline reference only.
+-- Prefer the Node runner above for any real upgrade.
+
 PRAGMA foreign_keys = OFF;
 
 -- site_content: (key, locale)

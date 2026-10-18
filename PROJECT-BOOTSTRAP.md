@@ -17,7 +17,8 @@
 - `defaultLocale` הוא שפת התוכן הראשית.
 - `locales` מתחיל עם `[defaultLocale]` בלבד.
 - `multilingual` ו־`enabled` נגזרים מ־`locales.length > 1` ואינם ערכים ידניים.
-- במצב חד־לשוני אין language switcher, prefix או `hreflang`.
+- במצב חד־לשוני אין language switcher ציבורי, prefix או `hreflang`.
+- Admin Chrome i18n כבר קיים ב־Template (מילון `he`+`en`); בחד־לשוני הבוררים מוסתרים וה־chrome נעול ל־`defaultLocale`.
 - slugs באנגלית הם ברירת המחדל, אלא אם הלקוח ביקש במפורש slugs מקומיים.
 
 בתחילת כל פרויקט הסוכן חייב לשאול ולתעד במפורש:
@@ -91,7 +92,7 @@ PROJECT-BOOTSTRAP.md
 - Admin roles נוספים: כן/לא
 - `x-default`: default locale / landing נפרד
 
-אם `locales` מכיל יותר משפה אחת, קרא והפעל גם את `CMS-MULTILINGUAL-PROMPT.md`. אם יש רק locale אחד, אל תפעיל את פרומפט multilingual ואל תוסיף UI, prefix או `hreflang`.
+אם `locales` מכיל יותר משפה אחת, קרא והפעל גם את `CMS-MULTILINGUAL-PROMPT.md` (הפעלת locales + תוכן/URLs/SEO/Publish - לא יצירת Admin Chrome מחדש). אם יש רק locale אחד, אל תפעיל את פרומפט multilingual ואל תוסיף UI ציבורי, prefix או `hreflang`.
 
 כללי אבטחה:
 - אל תשמור סיסמאות, tokens, API keys או credentials ב־Git.

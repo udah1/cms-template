@@ -15,14 +15,15 @@
 
 תנאי מקדים — שלב 0 ב־Template:
 - ה־Template כבר locale-ready עם `defaultLocale` ו־`locales: [defaultLocale]` בלבד.
-- במצב זה אין UI לשפות, `hreflang`, prefix או ניהול תרגומים.
-- פרומפט זה אינו מוסיף מחדש את תשתית ה־locale; הוא מפעיל שפה שנייה ומרחיב את המימוש הקיים.
+- במצב זה אין UI לשפות ציבורי, `hreflang`, prefix או ניהול תרגומי תוכן.
+- Admin Chrome i18n (תוויות ממשק, `adminLocale` / `contentLocale`) כבר ממומש ב־Template; פרומפט זה אינו יוצר אותו מחדש.
+- פרומפט זה מפעיל locales נוספים ומרחיב תוכן, URLs, SEO ו־Publish - לא את מילון ה־Admin Chrome.
 
 מטרת העבודה:
 - להוסיף תמיכה בריבוי שפות רק לפרויקט הנוכחי.
 - לשמור על תמיכה מלאה בפרויקטים חד־לשוניים.
 - לא לשנות את התנהגות ברירת המחדל כאשר multilingual אינו מופעל.
-- לאפשר ניהול תוכן, Preview, Publish, Rollback ו־SEO לפי שפה.
+- לאפשר ניהול תוכן, Preview, Publish, Rollback ו־SEO לפי שפת תוכן (`contentLocale` / publish locale).
 - לא להכניס credentials, secrets, tokens או מידע של פרויקט אחר.
 
 ## הפעלת multilingual בפרויקט locale-ready
@@ -48,14 +49,20 @@ const enabled = multilingual;
 
 - האתר נשאר חד־לשוני מבחינת המשתמש.
 - הנתיבים הקיימים נשארים `/`, `/about/`, `/services/` וכו'.
-- אין language switcher, `hreflang` או נתיבי locale חדשים.
-- אין מסך ניהול שפות או הודעות תרגום ב־Admin.
+- אין language switcher ציבורי, `hreflang` או נתיבי locale חדשים.
+- בוררי שפת ממשק / שפת תוכן ב־Admin מוסתרים; chrome נעול ל־`defaultLocale`.
+- אין מסך ניהול תרגומים או הודעות תרגום ב־Admin.
 - אין צורך להזין תוכן כפול.
 - התנהגות ה־CMS, ה־SSR, ה־SEO וה־Publish נשארת זהה לפרויקט חד־לשוני רגיל.
 
 כאשר מופעל יותר מ־locale אחד:
 
 - מופעלים ניהול שפות, URLs, תרגומים, SEO ו־Publish לפי locale.
+- Language switcher ציבורי: dropdown (`<select data-lang-switch>`) בכותרת + בתפריט מובייל; מוזרק מ־SSR רק כש־`locales.length > 1`. חייב להיות גלוי גם ב־LTR וגם ב־RTL במובייל.
+- ב־Admin מוצגים שני selectors: שפת תוכן (`contentLocale`) ראשונה, ואחריה שפת ממשק (`adminLocale`). Preview/Publish/Rollback משתמשים ב־publish locale (= `contentLocale` שנלכד בתחילת הפעולה).
+- ברירת מחדל: שינוי `contentLocale` מעדכן גם את `adminLocale` (follow). שינוי ידני של `adminLocale` נועל follow (`adminLocaleLocked` ב־localStorage); חזרה להתאמה לתוכן מבטלת את הנעילה.
+- מותר `adminLocale=en` עם `contentLocale=he` (ולהיפך) אחרי נעילה ידנית.
+- תוויות Admin Chrome מגיעות מקובצי UI (`public/admin/ui-i18n.js`); הודעות אתר ב־CMS נשארות ב־`system_messages` - לא לערבב.
 - אין לשנות את מודל הנתונים או להחליף ארכיטקטורה; יש להפעיל ולהשלים יכולות שכבר קיימות.
 
 המטרה היא שהוספת שפה בעתיד תהיה הוספת קונפיגורציה, תוכן ובדיקות — לא migration ארכיטקטוני גדול.
@@ -107,9 +114,10 @@ const I18N = {
 - שפות נוספות משתמשות ב־prefix, למשל `/en/` ו־`/en/services/`.
 
 יש לממש:
-- זיהוי locale מהנתיב.
+- זיהוי locale מהנתיב (כולל חיבור ל־middleware / `resolveSsrPath` - לא להסתפק ב־helper של language switcher בלבד).
 - בדיקה שה־locale מופעל.
-- locale לא מוכר מחזיר `404` ואינו מבצע fallback שקט.
+- Public SSR: locale לא מוכר מחזיר `404` ואינו מבצע fallback שקט.
+- Admin / API (`requestLocale`): locale חסר או לא מוכר מקבל soft-fallback ל־`defaultLocale` (נוחות עריכה בלבד). אין להחיל soft-fallback הזה על HTML ציבורי.
 - עמוד מתורגם חלקית שאינו עומד בדרישות completeness אינו מתפרסם תחת URL של אותה שפה.
 - אין להציג תוכן של שפה אחרת תחת URL של locale אחר.
 - מתג שפה שמוביל לאותו עמוד לפי entity/page ID: מ־`/about/` אל `/en/about/`, ומ־`/en/about/` אל `/about/`.
@@ -211,10 +219,16 @@ Payload מפורסם חייב להיות snapshot מלא ומבודד של local
 4. לאפשר לגרסה הישנה ולגרסה החדשה לקרוא את הנתונים במהלך המעבר, או להגדיר חלון Deploy שבו זה מובטח.
 5. לאשר ספירת רשומות, uniqueness ושלמות נתונים לפני הפעלת locale נוסף.
 
+שדרוג DB קיים (pre-locale → locale-ready) ב־Template:
+- אל תריץ את `migrations/005_locale_ready.sql` ישירות על DB חי (`wrangler d1 execute --file=...`). DDL של DROP/ALTER אינו אטומי ב־D1/SQLite.
+- השתמש ב־runner: `npm run db:migrate:locale-ready` (ו־`-- --remote` למרוחק).
+- ה־runner חייב להיות resume-safe: לזהות צעדים שהושלמו, להמשיך מ־`*_mig` מלאה אם המקור כבר נמחק, ולא למחוק טבלת ביניים שעלולה להיות העותק היחיד של הנתונים.
+- בדיקה מבודדת: `npm run test:migrate-005` (D1 נפרד תחת `.wrangler/state-migrate-005-test`; bootstrap אחד ב־wrangler ואז sqlite3; timeout ברירת מחדל 90s דרך `MIGRATE_005_TEST_TIMEOUT_MS`).
+
 אין להפעיל multilingual בפרויקט קיים לפני שה־backfill אומת.
 
 ב־Admin יש להוסיף:
-- בחירת שפה לעריכה.
+- בחירת שפת תוכן לעריכה (ראשונה ויזואלית); שפת ממשק משנית עם follow/lock כמתואר למעלה.
 - הצגת מצב תרגום: `missing`, `draft`, `published`.
 - סימון ברור לשדות שחסר להם תרגום.
 - Preview לפי שפה.
@@ -243,6 +257,14 @@ system_messages
 - שדות אופציונליים מסומנים כחסרים אך אינם מקבלים fallback שקט.
 - אין להציג ערך משפה אחרת תחת locale נוכחי.
 - תוכן משותף שאינו טקסטואלי נשמר פעם אחת ומקושר לכל התרגומים.
+
+## קטגוריות ותוכן מוזרק ב־SSR
+
+- `parseCategories` / קריאת תרגומים חייבות לתת אמון בערכים השמורים לפי locale. אין לסנן קטגוריות EN מול allowlist עברי בלבד (זה מחזיר `כללי` בטעות תחת `/en/`).
+- רשימת הקטגוריות ב־Admin API חייבת להיות לפי `contentLocale` (למשל `portfolioCategoriesForLocale`).
+- החלפת innerHTML לפי `id` או `data-content-html` ב־SSR חייבת לספור עומק תגיות תואמות. Regex שעוצר ב־closing tag הראשון משאיר placeholders בעברית ליד תוכן באנגלית.
+- שדות CMS (`data-content`) אינם מספיקים לבדם: chrome סטטי בתבנית (ניווט, כותרות מקטע, CTA, aria-labels) חייב לעבור החלפה לפי locale (מילון chrome / `applyStaticChrome`), אחרת העמוד נשאר מעורב.
+- Client hydrate (`public/js/site.js`) חייב לקרוא `/api/public/site?locale=...` לפי `document.documentElement.lang` (או מקביל), לא את default locale בלבד.
 
 ## SSR ו־SEO
 
@@ -348,6 +370,8 @@ rollback × locale
 - query parameter זדוני או token ב־redirect.
 
 אם קיימים scripts מתאימים, הרץ גם:
+- `npm run test:admin-i18n`
+- `npm run test:migrate-005`
 - `npm run test:acceptance`
 - `npm run test:ssr`
 - `npm run test:audit`
@@ -387,8 +411,10 @@ rollback × locale
 - כל פרויקט locale-ready גם כאשר הוא חד־לשוני.
 - default locale ללא prefix; locales נוספים עם prefix.
 - slugs באנגלית כברירת מחדל; שינוי לכך דורש בקשה מפורשת.
-- locale או תרגום חסר אינם מקבלים fallback שקט; התוצאה היא `404`.
+- Public SSR: locale או תרגום חסר אינם מקבלים fallback שקט; התוצאה היא `404`.
+- Admin / API: soft-fallback ל־`defaultLocale` ל־locale לא מוכר (לא להחיל על HTML ציבורי).
 - Publish ו־Rollback מתבצעים לפי locale.
+- שדרוג pre-locale → locale-ready רק דרך `npm run db:migrate:locale-ready` (לא SQL 005 ישיר על DB חי).
 - Publish-all אינו חלק מגרסה ראשונה.
 - `x-default` מצביע ל־default locale רק כאשר multilingual מופעל.
 - Audit Log הוא read-only וללא DELETE.

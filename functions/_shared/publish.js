@@ -87,7 +87,7 @@ async function releasePublishLock(db, locale) {
 }
 
 /**
- * @param {{ db: any, userId: number|null, siteOrigin: string, forceFail?: boolean, payloadOverride?: object, locale?: string }} opts
+ * @param {{ db: any, userId: number|null, siteOrigin: string, forceFail?: boolean, payloadOverride?: object, locale?: string, alreadyLocked?: boolean }} opts
  */
 export async function publishFromDraft(opts) {
   const {
@@ -97,14 +97,17 @@ export async function publishFromDraft(opts) {
     forceFail = false,
     payloadOverride = null,
     locale = getDefaultLocale(),
+    alreadyLocked = false,
   } = opts;
   const resolved = await ensurePublishState(db, locale);
 
-  const locked = await claimPublishLock(db, resolved);
-  if (!locked) {
-    const err = new Error('פרסום כבר בתהליך');
-    err.status = 409;
-    throw err;
+  if (!alreadyLocked) {
+    const locked = await claimPublishLock(db, resolved);
+    if (!locked) {
+      const err = new Error('פרסום כבר בתהליך');
+      err.status = 409;
+      throw err;
+    }
   }
 
   let versionId = null;
@@ -186,46 +189,65 @@ export async function publishFromDraft(opts) {
 
 export async function rollbackToPrevious(db, userId, siteOrigin, locale = getDefaultLocale()) {
   const resolved = await ensurePublishState(db, locale);
-  const state = await db
-    .prepare(
-      'SELECT published_version_id, previous_version_id, publishing FROM site_publish_state WHERE locale = ?'
-    )
-    .bind(resolved)
-    .first();
-  if (state?.publishing) {
+
+  // Claim the publish lock before mutating draft so a concurrent publish
+  // cannot interleave between restore and publishFromDraft.
+  const locked = await claimPublishLock(db, resolved);
+  if (!locked) {
     const err = new Error('פרסום כבר בתהליך');
     err.status = 409;
     throw err;
   }
-  if (!state?.previous_version_id) {
-    const err = new Error('אין גרסה קודמת לשחזור');
-    err.status = 400;
-    throw err;
-  }
 
-  const prev = await db
-    .prepare(`SELECT id, locale, payload_json, status FROM site_versions WHERE id = ?`)
-    .bind(state.previous_version_id)
-    .first();
-  if (!prev?.payload_json) {
-    const err = new Error('הגרסה הקודמת לא נמצאה');
-    err.status = 404;
-    throw err;
-  }
-
-  let payload;
   try {
-    payload = JSON.parse(prev.payload_json);
-  } catch {
-    const err = new Error('הגרסה הקודמת פגומה');
-    err.status = 500;
+    const state = await db
+      .prepare(
+        'SELECT published_version_id, previous_version_id, publishing FROM site_publish_state WHERE locale = ?'
+      )
+      .bind(resolved)
+      .first();
+    if (!state?.previous_version_id) {
+      const err = new Error('אין גרסה קודמת לשחזור');
+      err.status = 400;
+      throw err;
+    }
+
+    const prev = await db
+      .prepare(`SELECT id, locale, payload_json, status FROM site_versions WHERE id = ?`)
+      .bind(state.previous_version_id)
+      .first();
+    if (!prev?.payload_json) {
+      const err = new Error('הגרסה הקודמת לא נמצאה');
+      err.status = 404;
+      throw err;
+    }
+
+    let payload;
+    try {
+      payload = JSON.parse(prev.payload_json);
+    } catch {
+      const err = new Error('הגרסה הקודמת פגומה');
+      err.status = 500;
+      throw err;
+    }
+    if (!payload.locale) payload.locale = prev.locale || resolved;
+
+    // Restore draft workspace for this locale only (media URLs kept as-is).
+    await restoreDraftFromPayload(db, payload);
+
+    // Keep the same lock through publish so nothing interleaves after restore.
+    return await publishFromDraft({
+      db,
+      userId,
+      siteOrigin,
+      payloadOverride: payload,
+      locale: resolved,
+      alreadyLocked: true,
+    });
+  } catch (err) {
+    await releasePublishLock(db, resolved);
     throw err;
   }
-  if (!payload.locale) payload.locale = prev.locale || resolved;
-
-  // Restore draft workspace for this locale only (media URLs kept as-is).
-  await restoreDraftFromPayload(db, payload);
-  return publishFromDraft({ db, userId, siteOrigin, payloadOverride: payload, locale: resolved });
 }
 
 function stableSort(value) {

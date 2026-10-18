@@ -81,12 +81,24 @@ npm run test:acceptance
 
 ## Locale-ready (Stage 0)
 
-ה־Template מוכן לריבוי שפות גם כשיש שפה אחת בלבד:
+ה־Template מוכן לריבוי שפות גם כשיש שפה אחת בלבד. Stage 0 הוא **locale-ready בלבד** - לא multilingual ציבורי מלא:
 
 - קונפיג: `functions/_shared/i18n.js` (`defaultLocale: 'he'`, `locales: ['he']`).
 - `multilingual` / `enabled` נגזרים מ־`locales.length > 1` ואינם נשמרים ידנית.
 - תוכן, תרגומי ישויות, `site_versions` ו־`site_publish_state` כוללים `locale`.
-- במצב חד־לשוני אין language switcher, prefix או `hreflang`.
+- במצב חד־לשוני אין language switcher ציבורי, prefix או `hreflang`.
+- ה־SSR הציבורי ב־Template טוען את default locale בלבד; זיהוי `/en/...`, `hreflang` ו־canonical לפי locale מגיעים רק אחרי הפעלת [CMS-MULTILINGUAL-PROMPT.md](CMS-MULTILINGUAL-PROMPT.md) (או ב־`playground/multilingual` כהדגמה).
+- Admin / API: locale לא מוכר מקבל soft-fallback ל־default (נוחות עריכה). ב־Public SSR (אחרי הפעלת multilingual) locale לא מוכר חייב `404` ללא fallback שקט.
+- Admin Chrome i18n: מילון ממשק `he`+`en` ב־`public/admin/ui-i18n.js`, עם הפרדה בין `adminLocale` (ממשק) ל־`contentLocale` (תוכן/Publish). בחד־לשוני הבוררים מוסתרים.
+- בדיקות: `npm run test:admin-i18n` (ואופציונלי `npm run test:admin-i18n:api`).
 - להוספת שפה שנייה: ראו [CMS-MULTILINGUAL-PROMPT.md](CMS-MULTILINGUAL-PROMPT.md).
 
 אחרי שינוי סכמה מקומי, אם `db:reset` נכשל על טבלאות ישנות, מחקו את מצב D1 המקומי (`.wrangler/state`) והריצו שוב `npm run db:reset`.
+
+שדרוג DB קיים (pre-locale → locale-ready): אל תריצו את `migrations/005_locale_ready.sql` ישירות על DB חי. השתמשו ב־runner שמחדש צעדים וניתן להרצה חוזרת אחרי כשל חלקי:
+
+```bash
+npm run db:migrate:locale-ready
+npm run db:migrate:locale-ready -- --remote
+npm run test:migrate-005   # isolated D1; mid-DROP resume; sqlite3 fast-path (~10s, timeout 90s)
+```

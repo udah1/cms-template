@@ -1,3 +1,10 @@
+import {
+  getDefaultLocale,
+  getLocales,
+  isMultilingual,
+  localeDisplayName,
+  localizePath,
+} from './i18n.js';
 import { buildJsonLd, buildMeta, resolveSiteOrigin } from './seo.js';
 
 /** Public HTML routes → ASSETS template path. */
@@ -118,6 +125,32 @@ function setDataContent(html, key, value) {
   return html.replace(re, `$1${escapeHtml(value)}$3`);
 }
 
+function setElementInnerByAttr(html, attr, attrValue, inner) {
+  const openRe = new RegExp(
+    `<([a-zA-Z][a-zA-Z0-9]*)\\b[^>]*\\s${escapeRegExp(attr)}=["']${escapeRegExp(attrValue)}["'][^>]*>`,
+    'i'
+  );
+  const openMatch = openRe.exec(html);
+  if (!openMatch) return html;
+  const tagName = openMatch[1];
+  const start = openMatch.index + openMatch[0].length;
+  const scanner = new RegExp(`</?${escapeRegExp(tagName)}\\b[^>]*>`, 'gi');
+  scanner.lastIndex = start;
+  let depth = 1;
+  let match;
+  while ((match = scanner.exec(html))) {
+    if (match[0].startsWith('</')) {
+      depth -= 1;
+      if (depth === 0) {
+        return html.slice(0, start) + inner + html.slice(match.index);
+      }
+      continue;
+    }
+    if (!/\/>$/.test(match[0])) depth += 1;
+  }
+  return html;
+}
+
 function setDataContentHtml(html, key, value) {
   if (value == null) return html;
   const parts = String(value)
@@ -125,12 +158,7 @@ function setDataContentHtml(html, key, value) {
     .map((p) => p.trim())
     .filter(Boolean);
   const inner = parts.map((p) => `<p>${escapeHtml(p)}</p>`).join('');
-  const re = new RegExp(
-    `(<[a-zA-Z][^>]*\\sdata-content-html=["']${escapeRegExp(key)}["'][^>]*>)([\\s\\S]*?)(<\\/[a-zA-Z]+>)`,
-    'i'
-  );
-  if (!re.test(html)) return html;
-  return html.replace(re, `$1${inner}$3`);
+  return setElementInnerByAttr(html, 'data-content-html', key, inner);
 }
 
 function setDataAttrText(html, attr, value) {
@@ -142,13 +170,35 @@ function setDataAttrText(html, attr, value) {
   return html.replace(re, `$1${escapeHtml(value)}$3`);
 }
 
+/**
+ * Replace the full innerHTML of the element with the given id.
+ * Depth-counts matching open/close tags so nested markup is not truncated
+ * at the first closing tag (e.g. portfolioGrid / servicesList).
+ */
 function setElementInnerById(html, id, inner) {
-  const re = new RegExp(
-    `(<[a-zA-Z][^>]*\\sid=["']${escapeRegExp(id)}["'][^>]*>)([\\s\\S]*?)(<\\/[a-zA-Z]+>)`,
+  const openRe = new RegExp(
+    `<([a-zA-Z][a-zA-Z0-9]*)\\b[^>]*\\sid=["']${escapeRegExp(id)}["'][^>]*>`,
     'i'
   );
-  if (!re.test(html)) return html;
-  return html.replace(re, `$1${inner}$3`);
+  const openMatch = openRe.exec(html);
+  if (!openMatch) return html;
+  const tagName = openMatch[1];
+  const start = openMatch.index + openMatch[0].length;
+  const scanner = new RegExp(`</?${escapeRegExp(tagName)}\\b[^>]*>`, 'gi');
+  scanner.lastIndex = start;
+  let depth = 1;
+  let match;
+  while ((match = scanner.exec(html))) {
+    if (match[0].startsWith('</')) {
+      depth -= 1;
+      if (depth === 0) {
+        return html.slice(0, start) + inner + html.slice(match.index);
+      }
+      continue;
+    }
+    if (!/\/>$/.test(match[0])) depth += 1;
+  }
+  return html;
 }
 
 function servicesHtml(services, page) {
@@ -303,9 +353,69 @@ function pageTitle(meta, content, pagePath) {
 }
 
 /**
- * Inject published/draft payload into a static HTML template.
+ * Public language switcher (dropdown). No-op when locales.length === 1.
+ * Compact select scales to many locales; works on mobile LTR and RTL.
  */
-export function renderHtml(template, payload, { origin, pagePath, preview = false } = {}) {
+export function languageSwitcherHtml(pagePath, locale, availableLocales, { className = 'lang-switch' } = {}) {
+  if (!isMultilingual()) return '';
+  const available =
+    availableLocales instanceof Set ? availableLocales : new Set(availableLocales || getLocales());
+  const options = getLocales()
+    .map((loc) => {
+      const label = localeDisplayName(loc);
+      const href = localizePath(pagePath, loc);
+      const selected = loc === locale ? ' selected' : '';
+      const disabled = available.has(loc) ? '' : ' disabled';
+      return `<option value="${escapeAttr(href)}" lang="${escapeAttr(loc)}"${selected}${disabled}>${escapeHtml(label)}</option>`;
+    })
+    .join('');
+  return `<label class="${escapeAttr(className)}"><select class="lang-switch__select" data-lang-switch aria-label="Language">${options}</select></label>`;
+}
+
+export function injectLanguageSwitcher(html, pagePath, locale, availableLocales) {
+  const headerSwitcher = languageSwitcherHtml(pagePath, locale, availableLocales, {
+    className: 'lang-switch lang-switch--header',
+  });
+  const sidebarSwitcher = languageSwitcherHtml(pagePath, locale, availableLocales, {
+    className: 'lang-switch lang-switch--sidebar',
+  });
+  if (!headerSwitcher) return html;
+
+  // Drop previous switchers (nav/label/tools variants from older builds)
+  let out = html
+    .replace(/<div class="header-tools">([\s\S]*?)<\/div>/gi, '$1')
+    .replace(/<(?:nav|label) class="lang-switch[\s\S]*?<\/(?:nav|label)>/gi, '');
+
+  // Place after menu button so CSS order can pin menu at inline-start and
+  // language at inline-end (works for both LTR and RTL).
+  if (/<button class="menu-button"[\s\S]*?<\/button>/i.test(out)) {
+    out = out.replace(
+      /(<button class="menu-button"[\s\S]*?<\/button>)/i,
+      `$1\n      ${headerSwitcher}`
+    );
+  } else if (/<\/header>/i.test(out)) {
+    out = out.replace(/<\/header>/i, `  ${headerSwitcher}\n    </header>`);
+  }
+
+  if (/<nav class="sidebar-nav"[^>]*>/i.test(out)) {
+    out = out.replace(/(<nav class="sidebar-nav"[^>]*>)/i, `$1\n        ${sidebarSwitcher}\n`);
+  }
+
+  return out;
+}
+
+/**
+ * Inject published/draft payload into a static HTML template.
+ * @param {{ origin?: string, pagePath?: string, preview?: boolean, locale?: string, availableLocales?: Set<string>|string[] }} opts
+ */
+export function renderHtml(template, payload, opts = {}) {
+  const {
+    origin,
+    pagePath,
+    preview = false,
+    locale = payload?.locale || getDefaultLocale(),
+    availableLocales = getLocales(),
+  } = opts;
   const content = payload?.content || {};
   const meta = payload?.meta && Object.keys(payload.meta).length ? payload.meta : buildMeta(payload);
   const siteOrigin = resolveSiteOrigin(origin || 'http://127.0.0.1:8788');
@@ -325,6 +435,8 @@ export function renderHtml(template, payload, { origin, pagePath, preview = fals
     canonicalPath === '/'
       ? 'home'
       : canonicalPath.replace(/^\/|\/$/g, '') || 'home';
+
+  const available = availableLocales instanceof Set ? availableLocales : new Set(availableLocales || []);
 
   let html = template;
   const title = pageTitle(meta, content, canonicalPath);
@@ -366,6 +478,7 @@ export function renderHtml(template, payload, { origin, pagePath, preview = fals
   html = setDataAttrText(html, 'data-email-label', content.contact_email);
   html = injectBusinessChrome(html, content.business_name);
   html = injectWhatsApp(html, content);
+  html = injectLanguageSwitcher(html, isNotFound ? '/' : canonicalPath, locale, available);
 
   if (html.includes('id="servicesList"')) {
     html = setElementInnerById(html, 'servicesList', servicesHtml(payload.services, page));

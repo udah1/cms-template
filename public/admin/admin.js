@@ -1,27 +1,163 @@
 import { extractVideoCover, optimizeMediaFile } from './media-optimize.js';
+import {
+  applyAdminChrome,
+  assertUiI18nComplete,
+  fieldLabel,
+  localeDir,
+  normalizeLocale,
+  normalizeUiLocale,
+  t,
+  UI_DEFAULT_LOCALE,
+} from './ui-i18n.js';
 
-const CONTENT_FIELDS = [
-  ['business_name', 'שם העסק'],
-  ['hero_eyebrow', 'כותרת עליונה ב־Hero'],
-  ['hero_title', 'כותרת Hero'],
-  ['hero_title_em', 'משפט משנה ב־Hero'],
-  ['hero_description', 'תיאור Hero', 'textarea'],
-  ['brand_quote', 'משפט המותג', 'textarea'],
-  ['about_title', 'כותרת אודות'],
-  ['about_title_em', 'משפט משנה באודות'],
-  ['about_body', 'טקסט אודות', 'textarea'],
-  ['portfolio_lead', 'תיאור גלריה', 'textarea'],
-  ['contact_intro', 'טקסט יצירת קשר', 'textarea'],
-  ['area_label', 'אזור פעילות'],
-  ['instagram_url', 'קישור Instagram'],
-  ['contact_phone', 'טלפון / WhatsApp'],
-  ['whatsapp_url', 'כתובת WhatsApp (wa.me)'],
-  ['whatsapp_message', 'הודעה מקדימה ל־WhatsApp', 'textarea'],
-  ['contact_email', 'אימייל'],
-  ['seo_title', 'כותרת SEO'],
-  ['seo_description', 'תיאור SEO', 'textarea'],
-  ['og_image', 'תמונת OG (נתיב או URL)'],
+/** Structural field defs only - labels come from FIELD_LABELS via fieldLabel(). */
+const CONTENT_FIELD_DEFS = [
+  ['business_name'],
+  ['hero_eyebrow'],
+  ['hero_title'],
+  ['hero_title_em'],
+  ['hero_description', 'textarea'],
+  ['brand_quote', 'textarea'],
+  ['about_title'],
+  ['about_title_em'],
+  ['about_body', 'textarea'],
+  ['portfolio_lead', 'textarea'],
+  ['contact_intro', 'textarea'],
+  ['area_label'],
+  ['instagram_url'],
+  ['contact_phone'],
+  ['whatsapp_url'],
+  ['whatsapp_message', 'textarea'],
+  ['contact_email'],
+  ['seo_title'],
+  ['seo_description', 'textarea'],
+  ['og_image'],
 ];
+
+const STORAGE_ADMIN = 'cmsAdmin.adminLocale';
+const STORAGE_CONTENT = 'cmsAdmin.contentLocale';
+const STORAGE_ADMIN_LOCKED = 'cmsAdmin.adminLocaleLocked';
+
+let siteLocales = [UI_DEFAULT_LOCALE];
+let siteDefaultLocale = UI_DEFAULT_LOCALE;
+let adminLocale = UI_DEFAULT_LOCALE;
+let contentLocale = UI_DEFAULT_LOCALE;
+let adminLocaleLocked = false;
+let contentLoadGen = 0;
+
+function tt(key, vars) {
+  return t(adminLocale, key, vars);
+}
+
+function readStoredLocale(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    return normalizeUiLocale(raw);
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredLocale(key, locale) {
+  try {
+    localStorage.setItem(key, normalizeUiLocale(locale));
+  } catch {
+    /* storage blocked - ignore */
+  }
+}
+
+function readStoredBool(key) {
+  try {
+    return localStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeStoredBool(key, value) {
+  try {
+    localStorage.setItem(key, value ? '1' : '0');
+  } catch {
+    /* storage blocked - ignore */
+  }
+}
+
+/** Map content locale → UI dictionary locale (he/en). */
+function uiLocaleForContent(locale) {
+  return normalizeUiLocale(locale);
+}
+
+/**
+ * When UI is not locked, keep admin chrome aligned with content locale.
+ * Manual admin-locale changes set the lock; matching content again clears it.
+ */
+function syncAdminLocaleToContent({ persist = true } = {}) {
+  if (adminLocaleLocked) return false;
+  const next = uiLocaleForContent(contentLocale);
+  if (next === adminLocale) return false;
+  adminLocale = next;
+  if (persist) writeStoredLocale(STORAGE_ADMIN, adminLocale);
+  return true;
+}
+
+function setAdminLocaleLocked(locked) {
+  adminLocaleLocked = !!locked;
+  writeStoredBool(STORAGE_ADMIN_LOCKED, adminLocaleLocked);
+}
+
+function resolveContentLocale(requested) {
+  const normalized = normalizeLocale(requested);
+  if (normalized && siteLocales.includes(normalized)) return normalized;
+  // Case-insensitive match against configured locales (BCP-47 canonical form).
+  if (requested != null && String(requested).trim()) {
+    const needle = normalizeLocale(requested) || String(requested).trim();
+    const hit = siteLocales.find((loc) => normalizeLocale(loc) === needle || loc === needle);
+    if (hit) return hit;
+  }
+  return siteDefaultLocale;
+}
+
+function isMultilingualUi() {
+  return siteLocales.length > 1;
+}
+
+function withContentLocale(path, locale = contentLocale) {
+  const sep = path.includes('?') ? '&' : '?';
+  return `${path}${sep}locale=${encodeURIComponent(locale)}`;
+}
+
+function applyChrome() {
+  applyAdminChrome(adminLocale);
+  syncLocalePickers();
+}
+
+function syncLocalePickers() {
+  const wrap = document.getElementById('localePickers');
+  const adminSelect = document.getElementById('adminLocaleSelect');
+  const contentSelect = document.getElementById('contentLocaleSelect');
+  const multi = isMultilingualUi();
+  if (wrap) wrap.hidden = !multi;
+  if (adminSelect) {
+    // Admin chrome always offers he+en dictionary locales
+    adminSelect.value = normalizeUiLocale(adminLocale);
+  }
+  if (contentSelect) {
+    contentSelect.innerHTML = siteLocales
+      .map((loc) => `<option value="${loc}">${t(adminLocale, `locale.${loc}`) || loc}</option>`)
+      .join('');
+    contentSelect.value = contentLocale;
+  }
+}
+
+function initLocalesFromStorage() {
+  // Early chrome for login (may be overridden once site locales are known).
+  adminLocaleLocked = readStoredBool(STORAGE_ADMIN_LOCKED);
+  contentLocale = resolveContentLocale(readStoredLocale(STORAGE_CONTENT) || siteDefaultLocale);
+  adminLocale = readStoredLocale(STORAGE_ADMIN) || uiLocaleForContent(contentLocale);
+  syncAdminLocaleToContent({ persist: true });
+  applyChrome();
+}
 
 const loginView = document.getElementById('loginView');
 const appView = document.getElementById('appView');
@@ -41,6 +177,7 @@ const confirmDialog = document.getElementById('confirmDialog');
 const confirmTitle = document.getElementById('confirmTitle');
 const confirmMessage = document.getElementById('confirmMessage');
 const confirmOkBtn = document.getElementById('confirmOkBtn');
+const confirmAltBtn = document.getElementById('confirmAltBtn');
 const confirmCancelBtn = document.getElementById('confirmCancelBtn');
 
 let contentState = {};
@@ -49,25 +186,45 @@ let portfolioState = [];
 let categories = ['כללי', 'פרויקטים', 'גלריה', 'וידאו'];
 let confirmResolver = null;
 
-function askConfirm({ title = 'אישור מחיקה', message = 'למחוק?', confirmLabel = 'מחיקה' } = {}) {
-  confirmTitle.textContent = title;
-  confirmMessage.textContent = message;
-  confirmOkBtn.textContent = confirmLabel;
+function askConfirm({
+  title,
+  message,
+  confirmLabel,
+  confirmClass = 'btn btn-danger',
+  altLabel = null,
+  altValue = 'alt',
+} = {}) {
+  confirmTitle.textContent = title || tt('common.confirmDeleteTitle');
+  confirmMessage.textContent = message || tt('common.confirmDeleteMessage');
+  confirmOkBtn.textContent = confirmLabel || tt('common.delete');
+  confirmOkBtn.className = confirmClass;
+  if (confirmAltBtn) {
+    if (altLabel) {
+      confirmAltBtn.hidden = false;
+      confirmAltBtn.textContent = altLabel;
+    } else {
+      confirmAltBtn.hidden = true;
+    }
+  }
+  confirmCancelBtn.textContent = tt('common.cancel');
   confirmDialog.showModal();
   return new Promise((resolve) => {
-    confirmResolver = resolve;
+    confirmResolver = (value) => resolve(value);
   });
 }
 
 function settleConfirm(result) {
   if (confirmDialog.open) confirmDialog.close();
   if (confirmResolver) {
-    confirmResolver(result);
+    const resolve = confirmResolver;
     confirmResolver = null;
+    resolve(result);
   }
+  if (confirmAltBtn) confirmAltBtn.hidden = true;
 }
 
 confirmOkBtn.addEventListener('click', () => settleConfirm(true));
+confirmAltBtn?.addEventListener('click', () => settleConfirm('alt'));
 confirmCancelBtn.addEventListener('click', () => settleConfirm(false));
 confirmDialog.addEventListener('cancel', (event) => {
   event.preventDefault();
@@ -85,7 +242,7 @@ async function api(path, options = {}) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const err = new Error(data.error || 'שגיאה');
+    const err = new Error(data.error || tt('common.error'));
     err.status = res.status;
     throw err;
   }
@@ -119,11 +276,15 @@ function collectContentDraft() {
   return { content, services };
 }
 
+function isContentDirty() {
+  return JSON.stringify(collectContentDraft()) !== savedSnapshot;
+}
+
 function updateSaveBar() {
-  const dirty = JSON.stringify(collectContentDraft()) !== savedSnapshot;
+  const dirty = isContentDirty();
   saveContentBtn.disabled = !dirty;
   saveBar.classList.toggle('is-dirty', dirty);
-  saveBarHint.textContent = dirty ? 'יש שינויים שלא נשמרו' : 'אין שינויים לשמירה';
+  saveBarHint.textContent = dirty ? tt('save.hintDirty') : tt('save.hintClean');
 }
 
 function markContentClean() {
@@ -143,18 +304,22 @@ function switchTab(name) {
   if (name === 'audit') {
     loadAuditLog({ reset: true }).catch((err) => {
       const status = document.getElementById('auditStatus');
-      if (status) showStatus(status, err.message || 'טעינת היסטוריה נכשלה', true);
+      if (status) showStatus(status, err.message || tt('audit.loadFailed'), true);
     });
   }
 }
 
 function renderContentFields() {
-  contentFields.innerHTML = CONTENT_FIELDS.map(([key, label, type]) => {
+  const dir = localeDir(contentLocale);
+  contentFields.innerHTML = CONTENT_FIELD_DEFS.map((def) => {
+    const key = def[0];
+    const type = def[1];
+    const label = fieldLabel(adminLocale, key);
     const value = contentState[key] || '';
     if (type === 'textarea') {
-      return `<label>${label}<textarea data-key="${key}" rows="4">${escapeHtml(value)}</textarea></label>`;
+      return `<label>${label}<textarea data-key="${key}" lang="${contentLocale}" dir="${dir}" rows="4">${escapeHtml(value)}</textarea></label>`;
     }
-    return `<label>${label}<input data-key="${key}" value="${escapeAttr(value)}" /></label>`;
+    return `<label>${label}<input data-key="${key}" lang="${contentLocale}" dir="${dir}" value="${escapeAttr(value)}" /></label>`;
   }).join('');
 }
 
@@ -165,19 +330,20 @@ function renderServices() {
   const addBtn = document.getElementById('addServiceBtn');
   if (addBtn) addBtn.disabled = servicesState.length >= MAX_SERVICES;
 
+  const dir = localeDir(contentLocale);
   servicesFields.innerHTML = servicesState
     .map(
       (s, index) => `
       <div class="card" data-service-id="${s.id}">
         <div class="card-top">
-          <h4>שירות ${index + 1}</h4>
+          <h4>${tt('content.serviceN', { n: index + 1 })}</h4>
           <div class="card-actions">
-            <label class="check"><input type="checkbox" data-service-visible ${s.visible ? 'checked' : ''}/> מוצג</label>
-            <button type="button" class="btn btn-danger" data-delete-service="${s.id}" ${canDelete ? '' : 'disabled'}>מחיקה</button>
+            <label class="check"><input type="checkbox" data-service-visible ${s.visible ? 'checked' : ''}/> ${tt('content.visible')}</label>
+            <button type="button" class="btn btn-danger" data-delete-service="${s.id}" ${canDelete ? '' : 'disabled'}>${tt('content.delete')}</button>
           </div>
         </div>
-        <label>שם<input data-service-title value="${escapeAttr(s.title)}" /></label>
-        <label>תיאור<textarea data-service-description rows="3">${escapeHtml(s.description)}</textarea></label>
+        <label>${tt('content.serviceName')}<input data-service-title lang="${contentLocale}" dir="${dir}" value="${escapeAttr(s.title)}" /></label>
+        <label>${tt('content.serviceDesc')}<textarea data-service-description lang="${contentLocale}" dir="${dir}" rows="3">${escapeHtml(s.description)}</textarea></label>
       </div>`
     )
     .join('');
@@ -197,7 +363,7 @@ function portfolioThumbHtml(item) {
     : `<span class="card-thumb-play" aria-hidden="true"></span>`;
   return `<button type="button" class="card-thumb${isVideo ? ' is-video' : ''}${
     thumbSrc ? '' : ' card-thumb-empty'
-  }" data-preview="${item.id}" aria-label="${isVideo ? 'ניגון סרטון' : 'פתיחת תמונה'}">${inner}</button>`;
+  }" data-preview="${item.id}" aria-label="${isVideo ? tt('portfolio.playVideo') : tt('portfolio.openImage')}">${inner}</button>`;
 }
 
 const previewDialog = document.getElementById('previewDialog');
@@ -219,7 +385,7 @@ function closeMediaPreview() {
 function openMediaPreview(item) {
   if (!item || !previewDialog) return;
   const isVideo = item.media_type === 'video';
-  const title = item.title || (isVideo ? 'סרטון' : 'תמונה');
+  const title = item.title || (isVideo ? tt('portfolio.video') : tt('portfolio.image'));
   previewDialogTitle.textContent = title;
   if (isVideo && item.media_url) {
     const poster = item.cover_url ? ` poster="${escapeAttr(item.cover_url)}"` : '';
@@ -248,7 +414,7 @@ previewDialog?.addEventListener('click', (event) => {
 
 function renderPortfolio() {
   if (!portfolioState.length) {
-    portfolioList.innerHTML = '<p class="meta">אין פריטים עדיין. אפשר להוסיף פריט חדש.</p>';
+    portfolioList.innerHTML = `<p class="meta">${tt('portfolio.empty')}</p>`;
     return;
   }
   portfolioList.innerHTML = portfolioState
@@ -258,15 +424,15 @@ function renderPortfolio() {
         <div class="card-top">
           ${portfolioThumbHtml(item)}
           <div class="card-copy">
-            <h4>${escapeHtml(item.title || 'ללא כותרת')}</h4>
-            <div class="meta">${escapeHtml((item.categories || [item.category]).filter(Boolean).join(' · '))} · ${item.media_type === 'video' ? 'סרטון' : 'תמונה'} · ${item.visible ? 'מוצג' : 'מוסתר'}${item.featured ? ' · בדף הבית' : ''}</div>
+            <h4>${escapeHtml(item.title || tt('portfolio.untitled'))}</h4>
+            <div class="meta">${escapeHtml((item.categories || [item.category]).filter(Boolean).join(' · '))} · ${item.media_type === 'video' ? tt('portfolio.video') : tt('portfolio.image')} · ${item.visible ? tt('portfolio.visible') : tt('portfolio.hidden')}${item.featured ? ` · ${tt('portfolio.onHome')}` : ''}</div>
           </div>
         </div>
         <div class="card-actions">
-          <button type="button" class="btn btn-ghost" data-edit="${item.id}">עריכה</button>
-          <button type="button" class="btn btn-ghost btn-icon" data-up="${item.id}" aria-label="הזזה למעלה" ${index === 0 ? 'disabled' : ''}>↑</button>
-          <button type="button" class="btn btn-ghost btn-icon" data-down="${item.id}" aria-label="הזזה למטה" ${index === portfolioState.length - 1 ? 'disabled' : ''}>↓</button>
-          <button type="button" class="btn btn-danger" data-delete="${item.id}">מחיקה</button>
+          <button type="button" class="btn btn-ghost" data-edit="${item.id}">${tt('portfolio.edit')}</button>
+          <button type="button" class="btn btn-ghost btn-icon" data-up="${item.id}" aria-label="${tt('portfolio.moveUp')}" ${index === 0 ? 'disabled' : ''}>↑</button>
+          <button type="button" class="btn btn-ghost btn-icon" data-down="${item.id}" aria-label="${tt('portfolio.moveDown')}" ${index === portfolioState.length - 1 ? 'disabled' : ''}>↓</button>
+          <button type="button" class="btn btn-danger" data-delete="${item.id}">${tt('portfolio.delete')}</button>
         </div>
       </article>`
     )
@@ -284,11 +450,35 @@ function escapeAttr(str) {
   return escapeHtml(str).replaceAll('"', '&quot;');
 }
 
-async function loadAdminData() {
+async function loadAdminData({ locale } = {}) {
+  const loadLocale = resolveContentLocale(locale || contentLocale);
+  const gen = ++contentLoadGen;
   const [contentRes, portfolioRes] = await Promise.all([
-    api('/api/admin/content'),
-    api('/api/admin/portfolio'),
+    api(withContentLocale('/api/admin/content', loadLocale)),
+    api(withContentLocale('/api/admin/portfolio', loadLocale)),
   ]);
+  // Drop stale responses: newer load started, or user switched content locale.
+  if (gen !== contentLoadGen) return;
+  if (loadLocale !== contentLocale) return;
+  if (Array.isArray(contentRes.locales) && contentRes.locales.length) {
+    siteLocales = contentRes.locales.map((l) => String(l));
+  }
+  if (contentRes.defaultLocale) siteDefaultLocale = String(contentRes.defaultLocale);
+  if (!isMultilingualUi()) {
+    setAdminLocaleLocked(false);
+    contentLocale = siteDefaultLocale;
+    adminLocale = normalizeUiLocale(siteDefaultLocale);
+  } else {
+    contentLocale = resolveContentLocale(contentRes.locale || loadLocale || contentLocale);
+    if (!adminLocaleLocked) {
+      adminLocale = uiLocaleForContent(contentLocale);
+    } else {
+      adminLocale = readStoredLocale(STORAGE_ADMIN) || adminLocale;
+    }
+  }
+  writeStoredLocale(STORAGE_ADMIN, adminLocale);
+  writeStoredLocale(STORAGE_CONTENT, contentLocale);
+  applyChrome();
   contentState = contentRes.content || {};
   servicesState = contentRes.services || [];
   portfolioState = portfolioRes.items || [];
@@ -333,22 +523,19 @@ let publishPollTimer = null;
 function formatVersionDate(iso) {
   if (!iso) return '';
   try {
-    return new Date(iso.endsWith('Z') ? iso : `${iso}Z`).toLocaleString('he-IL');
+    const tag = adminLocale === 'en' ? 'en-US' : 'he-IL';
+    return new Date(iso.endsWith('Z') ? iso : `${iso}Z`).toLocaleString(tag);
   } catch {
     return iso;
   }
 }
 
-const PUBLISH_STATUS_HE = {
-  Published: 'פורסם',
-  Publishing: 'מפרסם…',
-  Failed: 'נכשל',
-};
-
 const publishStrip = document.getElementById('publishStrip');
 
-function publishStatusHe(status) {
-  return PUBLISH_STATUS_HE[status] || status || 'פורסם';
+function publishStatusLabelText(status) {
+  if (status === 'Publishing') return tt('publish.status.Publishing');
+  if (status === 'Failed') return tt('publish.status.Failed');
+  return tt('publish.status.Published');
 }
 
 function syncPublishStickyOffset() {
@@ -360,9 +547,12 @@ function syncPublishStickyOffset() {
 function renderPublishStatus(data) {
   const published = data?.publishedVersion;
   if (published) {
-    publishVersionLabel.textContent = `גרסה מפורסמת: #${published.id} · ${formatVersionDate(published.createdAt)}`;
+    publishVersionLabel.textContent = tt('publish.version', {
+      id: published.id,
+      date: formatVersionDate(published.createdAt),
+    });
   } else {
-    publishVersionLabel.textContent = 'גרסה מפורסמת: —';
+    publishVersionLabel.textContent = tt('publish.versionNone');
   }
 
   const status = data?.status || 'Published';
@@ -370,13 +560,13 @@ function renderPublishStatus(data) {
   const hasChanges = !!data?.hasUnpublishedChanges;
 
   if (busy) {
-    publishStatusLabel.textContent = publishStatusHe(status);
+    publishStatusLabel.textContent = publishStatusLabelText(status);
   } else if (hasChanges) {
-    publishStatusLabel.textContent = 'יש שינויים לפרסום';
+    publishStatusLabel.textContent = tt('publish.status.pending');
   } else if (status === 'Failed') {
-    publishStatusLabel.textContent = publishStatusHe('Failed');
+    publishStatusLabel.textContent = publishStatusLabelText('Failed');
   } else {
-    publishStatusLabel.textContent = publishStatusHe('Published');
+    publishStatusLabel.textContent = publishStatusLabelText('Published');
   }
 
   publishStatusLabel.classList.toggle('is-publishing', busy);
@@ -392,13 +582,18 @@ function renderPublishStatus(data) {
 }
 
 async function refreshPublishStatus() {
-  const data = await api('/api/admin/publish/status');
+  const locale = contentLocale;
+  const data = await api(withContentLocale('/api/admin/publish/status', locale));
   renderPublishStatus(data);
   return data;
 }
 
-function draftSavedMessage(data, base = 'טיוטה נשמרה') {
-  return data?.hasUnpublishedChanges ? `${base} - לא לשכוח לפרסם` : base;
+function draftSavedMessage(data, base) {
+  const baseMsg = base || tt('content.draftSaved');
+  if (data?.hasUnpublishedChanges) {
+    return base ? `${baseMsg} - ${tt('publish.status.pending')}` : tt('content.draftSavedPublish');
+  }
+  return baseMsg;
 }
 
 function stopPublishPoll() {
@@ -441,15 +636,17 @@ async function enterApp(email, { mustChangePassword = false } = {}) {
   }
   if (mustChangePassword) {
     switchTab('password');
-    showStatus(
-      document.getElementById('passwordStatus'),
-      'זוהתה סיסמת הדמו (ChangeMe123!). החליפו אותה לפני פריסה לאתר חי.',
-      true
-    );
+    showStatus(document.getElementById('passwordStatus'), tt('password.demoWarning'), true);
   }
 }
 
 async function boot() {
+  try {
+    assertUiI18nComplete();
+  } catch (err) {
+    console.error(err);
+  }
+  initLocalesFromStorage();
   try {
     const me = await api('/api/auth/me');
     await enterApp(me.email);
@@ -490,21 +687,28 @@ document.querySelectorAll('.tab').forEach((tab) => {
 document.getElementById('tab-content').addEventListener('input', updateSaveBar);
 document.getElementById('tab-content').addEventListener('change', updateSaveBar);
 
+async function saveContentDraft() {
+  const status = document.getElementById('contentStatus');
+  const locale = contentLocale;
+  const { content: nextContent, services: nextServices } = collectContentDraft();
+  saveContentBtn.disabled = true;
+  await api(withContentLocale('/api/admin/content', locale), {
+    method: 'PUT',
+    body: JSON.stringify({ locale, content: nextContent, services: nextServices }),
+  });
+  if (locale !== contentLocale) return;
+  contentState = nextContent;
+  servicesState = nextServices.map((s) => ({ ...s, visible: s.visible ? 1 : 0 }));
+  markContentClean();
+  const pub = await refreshPublishStatus().catch(() => null);
+  showStatus(status, draftSavedMessage(pub));
+}
+
 saveContentBtn.addEventListener('click', async () => {
   if (saveContentBtn.disabled) return;
   const status = document.getElementById('contentStatus');
-  const { content: nextContent, services: nextServices } = collectContentDraft();
   try {
-    saveContentBtn.disabled = true;
-    await api('/api/admin/content', {
-      method: 'PUT',
-      body: JSON.stringify({ content: nextContent, services: nextServices }),
-    });
-    contentState = nextContent;
-    servicesState = nextServices.map((s) => ({ ...s, visible: s.visible ? 1 : 0 }));
-    markContentClean();
-    const pub = await refreshPublishStatus().catch(() => null);
-    showStatus(status, draftSavedMessage(pub));
+    await saveContentDraft();
   } catch (err) {
     updateSaveBar();
     showStatus(status, err.message, true);
@@ -514,15 +718,18 @@ saveContentBtn.addEventListener('click', async () => {
 document.getElementById('addServiceBtn').addEventListener('click', async () => {
   const status = document.getElementById('contentStatus');
   if (servicesState.length >= MAX_SERVICES) {
-    showStatus(status, `ניתן להוסיף עד ${MAX_SERVICES} שירותים`, true);
+    showStatus(status, tt('content.maxServices', { n: MAX_SERVICES }), true);
     return;
   }
+  const locale = contentLocale;
   try {
-    await api('/api/admin/services', {
+    await api(withContentLocale('/api/admin/services', locale), {
       method: 'POST',
-      body: JSON.stringify({ title: 'שירות חדש', description: '' }),
+      body: JSON.stringify({ locale, title: tt('content.newServiceTitle'), description: '' }),
     });
-    const contentRes = await api('/api/admin/content');
+    if (locale !== contentLocale) return;
+    const contentRes = await api(withContentLocale('/api/admin/content', locale));
+    if (locale !== contentLocale) return;
     servicesState = contentRes.services || [];
     renderServices();
     markContentClean();
@@ -538,17 +745,22 @@ servicesFields.addEventListener('click', async (event) => {
   if (!btn) return;
   const status = document.getElementById('contentStatus');
   if (servicesState.length <= 1) {
-    showStatus(status, 'חייבים להשאיר לפחות שירות אחד', true);
+    showStatus(status, tt('content.minServices'), true);
     return;
   }
   const ok = await askConfirm({
-    title: 'מחיקת שירות',
-    message: 'למחוק את השירות? לא ניתן לשחזר אחר כך.',
+    title: tt('content.deleteServiceTitle'),
+    message: tt('content.deleteServiceMessage'),
   });
   if (!ok) return;
+  const locale = contentLocale;
   try {
-    await api(`/api/admin/services/${btn.dataset.deleteService}`, { method: 'DELETE' });
-    const contentRes = await api('/api/admin/content');
+    await api(withContentLocale(`/api/admin/services/${btn.dataset.deleteService}`, locale), {
+      method: 'DELETE',
+    });
+    if (locale !== contentLocale) return;
+    const contentRes = await api(withContentLocale('/api/admin/content', locale));
+    if (locale !== contentLocale) return;
     servicesState = contentRes.services || [];
     renderServices();
     markContentClean();
@@ -584,11 +796,11 @@ async function uploadMediaFile(file, kind = 'auto', onProgress) {
         resolve(data);
         return;
       }
-      const err = new Error(data.error || 'העלאה נכשלה');
+      const err = new Error(data.error || tt('upload.failed'));
       err.status = xhr.status;
       reject(err);
     };
-    xhr.onerror = () => reject(new Error('העלאה נכשלה - בעיית רשת'));
+    xhr.onerror = () => reject(new Error(tt('upload.networkFailed')));
     xhr.send(body);
   });
 }
@@ -638,7 +850,7 @@ function updateCurrentHints() {
   if (mediaHint) {
     if (mediaUrl && (itemForm.media_source?.value || 'upload') === 'upload') {
       mediaHint.hidden = false;
-      mediaHint.textContent = `נוכחי: ${mediaUrl}`;
+      mediaHint.textContent = tt('item.current', { url: mediaUrl });
     } else {
       mediaHint.hidden = true;
       mediaHint.textContent = '';
@@ -647,7 +859,7 @@ function updateCurrentHints() {
   if (coverHint) {
     if (coverUrl && (itemForm.cover_source?.value || 'upload') === 'upload') {
       coverHint.hidden = false;
-      coverHint.textContent = `נוכחי: ${coverUrl}`;
+      coverHint.textContent = tt('item.current', { url: coverUrl });
     } else {
       coverHint.hidden = true;
       coverHint.textContent = '';
@@ -682,7 +894,9 @@ function openItemDialog(item = null) {
   syncCoverVisibility();
   syncMediaTypeVisibility();
   updateCurrentHints();
-  document.getElementById('itemDialogTitle').textContent = item ? 'עריכת פריט' : 'פריט חדש';
+  document.getElementById('itemDialogTitle').textContent = item
+    ? tt('portfolio.itemEdit')
+    : tt('portfolio.itemNew');
   document.getElementById('itemError').hidden = true;
   itemDialog.showModal();
 }
@@ -715,9 +929,9 @@ document.getElementById('mediaFile')?.addEventListener('change', async (event) =
     const optimized = await optimizeMediaFile(file, kind, (msg) => {
       status.textContent = msg;
     });
-    status.textContent = 'מעלה מדיה… 0%';
+    status.textContent = tt('item.uploading', { pct: 0 });
     const data = await uploadMediaFile(optimized, kind, (pct) => {
-      status.textContent = `מעלה מדיה… ${pct}%`;
+      status.textContent = tt('item.uploading', { pct });
     });
     itemForm.media_url.value = data.url;
     if (kind === 'video') itemForm.media_type.value = 'video';
@@ -733,18 +947,18 @@ document.getElementById('mediaFile')?.addEventListener('change', async (event) =
         const coverFile = await extractVideoCover(file, (msg) => {
           status.textContent = msg;
         });
-        status.textContent = 'מעלה קאבר אוטומטי… 0%';
+        status.textContent = tt('item.uploadingCoverAuto', { pct: 0 });
         const coverData = await uploadMediaFile(coverFile, 'image', (pct) => {
-          status.textContent = `מעלה קאבר אוטומטי… ${pct}%`;
+          status.textContent = tt('item.uploadingCoverAuto', { pct });
         });
         itemForm.cover_url.value = coverData.url;
         updateCurrentHints();
-        status.textContent = 'המדיה והקאבר הועלו - טיוטה תישמר עם שמירת הפריט';
+        status.textContent = tt('item.uploadedWithCover');
       } catch (coverErr) {
-        status.textContent = `המדיה הועלתה; קאבר אוטומטי נכשל (${coverErr.message}). אפשר להעלות ידנית.`;
+        status.textContent = tt('item.uploadedCoverFail', { error: coverErr.message });
       }
     } else {
-      status.textContent = 'המדיה הועלתה (אחרי דחיסה) - טיוטה תישמר עם שמירת הפריט';
+      status.textContent = tt('item.uploaded');
     }
   } catch (err) {
     status.hidden = true;
@@ -764,13 +978,13 @@ document.getElementById('coverFile')?.addEventListener('change', async (event) =
     const optimized = await optimizeMediaFile(file, 'image', (msg) => {
       status.textContent = msg;
     });
-    status.textContent = 'מעלה קאבר… 0%';
+    status.textContent = tt('item.uploadingCover', { pct: 0 });
     const data = await uploadMediaFile(optimized, 'image', (pct) => {
-      status.textContent = `מעלה קאבר… ${pct}%`;
+      status.textContent = tt('item.uploadingCover', { pct });
     });
     itemForm.cover_url.value = data.url;
     updateCurrentHints();
-    status.textContent = 'הקאבר הועלה - טיוטה תישמר עם שמירת הפריט';
+    status.textContent = tt('item.coverUploaded');
   } catch (err) {
     status.hidden = true;
     error.hidden = false;
@@ -823,7 +1037,7 @@ document.getElementById('bulkImagesInput')?.addEventListener('change', (event) =
     return;
   }
   hint.hidden = false;
-  hint.textContent = `נבחרו ${count} תמונות`;
+  hint.textContent = tt('bulk.filesSelected', { n: count });
 });
 
 bulkForm?.addEventListener('submit', async (event) => {
@@ -837,12 +1051,12 @@ bulkForm?.addEventListener('submit', async (event) => {
   );
   if (!selectedCategories.length) {
     error.hidden = false;
-    error.textContent = 'יש לבחור לפחות קטגוריה אחת';
+    error.textContent = tt('item.needCategory');
     return;
   }
   if (!files.length) {
     error.hidden = false;
-    error.textContent = 'יש לבחור לפחות תמונה אחת';
+    error.textContent = tt('bulk.needImages');
     return;
   }
   const titleBase = bulkForm.title.value.trim();
@@ -858,15 +1072,17 @@ bulkForm?.addEventListener('submit', async (event) => {
       const file = files[i];
       const n = i + 1;
       status.hidden = false;
-      status.textContent = `מעלה תמונה ${n} מתוך ${files.length}…`;
+      status.textContent = tt('bulk.uploading', { n, total: files.length });
       try {
         const optimized = await optimizeMediaFile(file, 'image', (msg) => {
           status.textContent = `${msg} (${n}/${files.length})`;
         });
         const uploaded = await uploadMediaFile(optimized, 'image');
-        await api('/api/admin/portfolio', {
+        const locale = contentLocale;
+        await api(withContentLocale('/api/admin/portfolio', locale), {
           method: 'POST',
           body: JSON.stringify({
+            locale,
             title: numberedLabel(titleBase, n, files.length),
             categories: selectedCategories,
             media_type: 'image',
@@ -888,13 +1104,13 @@ bulkForm?.addEventListener('submit', async (event) => {
     if (failed) {
       showStatus(
         document.getElementById('portfolioStatus'),
-        `הועלו ${ok} תמונות, ${failed} נכשלו - בדקי ונסה שוב`,
+        tt('bulk.partialFail', { ok, failed }),
         true
       );
     } else {
       showStatus(
         document.getElementById('portfolioStatus'),
-        draftSavedMessage(pub, `הועלו ${ok} תמונות לטיוטה`)
+        draftSavedMessage(pub, tt('bulk.done', { n: ok }))
       );
     }
   } catch (err) {
@@ -912,10 +1128,12 @@ itemForm.addEventListener('submit', async (event) => {
   const selectedCategories = getSelectedCategories();
   if (!selectedCategories.length) {
     error.hidden = false;
-    error.textContent = 'יש לבחור לפחות קטגוריה אחת';
+    error.textContent = tt('item.needCategory');
     return;
   }
+  const locale = contentLocale;
   const payload = {
+    locale,
     title: itemForm.title.value.trim(),
     categories: selectedCategories,
     media_type: itemForm.media_type.value,
@@ -929,12 +1147,15 @@ itemForm.addEventListener('submit', async (event) => {
   try {
     if (id) {
       const existing = portfolioState.find((p) => String(p.id) === String(id));
-      await api(`/api/admin/portfolio/${id}`, {
+      await api(withContentLocale(`/api/admin/portfolio/${id}`, locale), {
         method: 'PUT',
         body: JSON.stringify({ ...payload, sort_order: existing?.sort_order || 0 }),
       });
     } else {
-      await api('/api/admin/portfolio', { method: 'POST', body: JSON.stringify(payload) });
+      await api(withContentLocale('/api/admin/portfolio', locale), {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
     }
     itemDialog.close();
     await loadAdminData();
@@ -965,13 +1186,16 @@ portfolioList.addEventListener('click', async (event) => {
 
   if (btn.dataset.delete) {
     const ok = await askConfirm({
-      title: 'מחיקת פריט',
-      message: 'למחוק את הפריט מתיק העבודות? לא ניתן לשחזר אחר כך.',
+      title: tt('portfolio.deleteTitle'),
+      message: tt('portfolio.deleteMessage'),
     });
     if (!ok) return;
+    const locale = contentLocale;
     try {
-      await api(`/api/admin/portfolio/${btn.dataset.delete}`, { method: 'DELETE' });
-      await loadAdminData();
+      await api(withContentLocale(`/api/admin/portfolio/${btn.dataset.delete}`, locale), {
+        method: 'DELETE',
+      });
+      await loadAdminData({ locale });
       const pub = await refreshPublishStatus().catch(() => null);
       showStatus(status, draftSavedMessage(pub));
     } catch (err) {
@@ -988,9 +1212,13 @@ portfolioList.addEventListener('click', async (event) => {
     if (swapWith < 0 || swapWith >= portfolioState.length) return;
     const ids = portfolioState.map((p) => p.id);
     [ids[index], ids[swapWith]] = [ids[swapWith], ids[index]];
+    const locale = contentLocale;
     try {
-      await api('/api/admin/portfolio/reorder', { method: 'PUT', body: JSON.stringify({ ids }) });
-      await loadAdminData();
+      await api(withContentLocale('/api/admin/portfolio/reorder', locale), {
+        method: 'PUT',
+        body: JSON.stringify({ ids, locale }),
+      });
+      await loadAdminData({ locale });
     } catch (err) {
       showStatus(status, err.message, true);
     }
@@ -1012,18 +1240,22 @@ document.getElementById('passwordForm').addEventListener('submit', async (event)
       }),
     });
     formEl.reset();
-    showStatus(status, 'הסיסמה עודכנה.');
+    showStatus(status, tt('password.updated'));
   } catch (err) {
     showStatus(status, err.message, true);
   }
 });
 
 previewBtn.addEventListener('click', async () => {
+  const publishLocale = contentLocale;
   try {
     previewBtn.disabled = true;
-    const data = await api('/api/admin/preview-token', { method: 'POST', body: '{}' });
+    const data = await api(withContentLocale('/api/admin/preview-token', publishLocale), {
+      method: 'POST',
+      body: JSON.stringify({ locale: publishLocale }),
+    });
     window.open(data.previewUrl, '_blank', 'noopener');
-    showStatus(publishMessage, 'נפתחה תצוגה מקדימה של הטיוטה');
+    showStatus(publishMessage, tt('publish.previewOpened'));
   } catch (err) {
     showStatus(publishMessage, err.message, true);
   } finally {
@@ -1033,51 +1265,122 @@ previewBtn.addEventListener('click', async () => {
 
 publishBtn.addEventListener('click', async () => {
   const ok = await askConfirm({
-    title: 'פרסום האתר',
-    message: 'לפרסם את הטיוטה הנוכחית לאתר הציבורי?',
-    confirmLabel: 'פרסום',
+    title: tt('publish.confirmTitle'),
+    message: tt('publish.confirmMessage'),
+    confirmLabel: tt('publish.confirmOk'),
+    confirmClass: 'btn',
   });
   if (!ok) return;
+  const publishLocale = contentLocale;
   try {
     publishBtn.disabled = true;
     previewBtn.disabled = true;
     rollbackBtn.disabled = true;
-    publishStatusLabel.textContent = publishStatusHe('Publishing');
+    publishStatusLabel.textContent = publishStatusLabelText('Publishing');
     publishStatusLabel.classList.add('is-publishing');
     publishStatusLabel.classList.remove('is-failed');
-    showStatus(publishMessage, 'מפרסם…');
-    await api('/api/admin/publish', { method: 'POST', body: '{}' });
+    showStatus(publishMessage, tt('publish.publishing'));
+    await api(withContentLocale('/api/admin/publish', publishLocale), {
+      method: 'POST',
+      body: JSON.stringify({ locale: publishLocale }),
+    });
     await pollUntilIdle();
-    showStatus(publishMessage, 'פורסם בהצלחה');
+    showStatus(publishMessage, tt('publish.success'));
   } catch (err) {
     await refreshPublishStatus().catch(() => {});
-    showStatus(publishMessage, err.message || 'הפרסום נכשל', true);
+    showStatus(publishMessage, err.message || tt('publish.failed'), true);
   }
 });
 
 rollbackBtn.addEventListener('click', async () => {
   const ok = await askConfirm({
-    title: 'שחזור לגרסה קודמת',
-    message:
-      'לשחזר את כל האתר (תוכן, גלריה, metadata ו־schema) לגרסה הקודמת שפורסמה? המדיה עצמה לא תימחק.',
-    confirmLabel: 'שחזור',
+    title: tt('rollback.confirmTitle'),
+    message: tt('rollback.confirmMessage'),
+    confirmLabel: tt('rollback.confirmOk'),
+    confirmClass: 'btn',
   });
   if (!ok) return;
+  const publishLocale = contentLocale;
   try {
     publishBtn.disabled = true;
     previewBtn.disabled = true;
     rollbackBtn.disabled = true;
-    publishStatusLabel.textContent = publishStatusHe('Publishing');
+    publishStatusLabel.textContent = publishStatusLabelText('Publishing');
     publishStatusLabel.classList.add('is-publishing');
-    showStatus(publishMessage, 'משחזר ומפרסם…');
-    await api('/api/admin/rollback', { method: 'POST', body: '{}' });
+    showStatus(publishMessage, tt('publish.rolling'));
+    await api(withContentLocale('/api/admin/rollback', publishLocale), {
+      method: 'POST',
+      body: JSON.stringify({ locale: publishLocale }),
+    });
     await pollUntilIdle();
-    await loadAdminData();
-    showStatus(publishMessage, 'שוחזר לגרסה הקודמת ופורסם');
+    await loadAdminData({ locale: publishLocale });
+    showStatus(publishMessage, tt('publish.rollbackSuccess'));
   } catch (err) {
     await refreshPublishStatus().catch(() => {});
-    showStatus(publishMessage, err.message || 'השחזור נכשל', true);
+    showStatus(publishMessage, err.message || tt('publish.rollbackFailed'), true);
   }
+});
+
+async function switchContentLocale(nextLocale) {
+  const target = resolveContentLocale(nextLocale);
+  if (target === contentLocale) return;
+  if (isContentDirty()) {
+    const choice = await askConfirm({
+      title: tt('dirty.switchTitle'),
+      message: tt('dirty.switchMessage'),
+      confirmLabel: tt('dirty.saveAndSwitch'),
+      confirmClass: 'btn',
+      altLabel: tt('dirty.discardAndSwitch'),
+    });
+    if (choice === false) {
+      syncLocalePickers();
+      return;
+    }
+    if (choice === true) {
+      try {
+        await saveContentDraft();
+      } catch (err) {
+        showStatus(document.getElementById('contentStatus'), err.message, true);
+        syncLocalePickers();
+        return;
+      }
+    }
+  }
+  contentLocale = target;
+  writeStoredLocale(STORAGE_CONTENT, contentLocale);
+  // Unlocked UI follows content; locked UI stays until the user changes it again.
+  syncAdminLocaleToContent({ persist: true });
+  syncLocalePickers();
+  try {
+    await loadAdminData({ locale: contentLocale });
+  } catch (err) {
+    showStatus(publishMessage, err.message, true);
+  }
+}
+
+function switchAdminLocale(nextLocale) {
+  if (!isMultilingualUi()) {
+    syncLocalePickers();
+    return;
+  }
+  adminLocale = normalizeUiLocale(nextLocale);
+  writeStoredLocale(STORAGE_ADMIN, adminLocale);
+  // Explicit UI pick locks follow-mode; matching content again unlocks.
+  setAdminLocaleLocked(adminLocale !== uiLocaleForContent(contentLocale));
+  applyChrome();
+  renderContentFields();
+  renderServices();
+  renderPortfolio();
+  updateSaveBar();
+  refreshPublishStatus().catch(() => {});
+}
+
+document.getElementById('adminLocaleSelect')?.addEventListener('change', (event) => {
+  switchAdminLocale(event.target.value);
+});
+
+document.getElementById('contentLocaleSelect')?.addEventListener('change', async (event) => {
+  await switchContentLocale(event.target.value);
 });
 
 window.addEventListener('resize', () => {
@@ -1108,7 +1411,7 @@ function formatAuditDetails(details) {
     const lines = Object.entries(fields).map(([key, diff]) => {
       const before = diff && typeof diff === 'object' && 'before' in diff ? diff.before : '';
       const after = diff && typeof diff === 'object' && 'after' in diff ? diff.after : '';
-      return `${key}:\n  לפני: ${stringifyAuditValue(before)}\n  אחרי: ${stringifyAuditValue(after)}`;
+      return `${key}:\n  ${tt('audit.before')}: ${stringifyAuditValue(before)}\n  ${tt('audit.after')}: ${stringifyAuditValue(after)}`;
     });
     if (lines.length) return lines.join('\n\n');
   }
@@ -1144,8 +1447,8 @@ function renderAuditItems(items, { append }) {
       const summary = escapeHtml(item.summary || '');
       const ok = item.success !== false;
       const badge = ok
-        ? '<span class="audit-badge">הצלחה</span>'
-        : '<span class="audit-badge is-fail">כישלון</span>';
+        ? `<span class="audit-badge">${tt('audit.success')}</span>`
+        : `<span class="audit-badge is-fail">${tt('audit.fail')}</span>`;
       const detailsText = formatAuditDetails(item.details);
       const detailsBlock = detailsText
         ? `<pre class="audit-diff">${escapeHtml(detailsText)}</pre>`
@@ -1163,7 +1466,7 @@ function renderAuditItems(items, { append }) {
     })
     .join('');
   if (append) list.insertAdjacentHTML('beforeend', html);
-  else list.innerHTML = html || '<p class="meta">אין רשומות להצגה.</p>';
+  else list.innerHTML = html || `<p class="meta">${tt('audit.empty')}</p>`;
 }
 
 async function loadAuditLog({ reset = false, append = false } = {}) {
@@ -1181,7 +1484,7 @@ async function loadAuditLog({ reset = false, append = false } = {}) {
     auditNextCursor = data.nextCursor || null;
     if (moreBtn) moreBtn.hidden = !data.hasMore;
   } catch (err) {
-    if (status) showStatus(status, err.message || 'טעינת היסטוריה נכשלה', true);
+    if (status) showStatus(status, err.message || tt('audit.loadFailed'), true);
     throw err;
   } finally {
     auditLoading = false;

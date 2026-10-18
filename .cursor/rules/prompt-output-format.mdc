@@ -1,0 +1,16 @@
+---
+description: Keep requested prompts entirely inside one code block
+alwaysApply: true
+---
+
+# Prompt Output Format
+
+When the user asks for a prompt, return the complete prompt inside exactly one Markdown code block.
+
+Rules:
+
+- Do not put an introduction, explanation, heading, or conclusion outside the code block.
+- Keep all instructions, context, examples, placeholders, and formatting inside that single code block.
+- Do not nest additional Markdown code blocks inside it; use indented text or plain examples instead.
+- Preserve the requested language and tone.
+- If the user requests a different format explicitly, follow the newer request.

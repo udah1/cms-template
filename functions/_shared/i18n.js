@@ -104,18 +104,47 @@ export function validateI18n(config = I18N) {
   };
 }
 
-/** Resolve a requested locale; falls back to default when missing/invalid for Stage 0 callers. */
-export function resolveLocale(requested, config = I18N) {
+/** Strict: returns locale only if enabled; otherwise null (no silent fallback). */
+export function matchEnabledLocale(requested, config = I18N) {
   const validated = validateI18n(config);
   const locale = normalizeLocale(requested);
   if (locale && validated.locales.includes(locale)) return locale;
-  return validated.defaultLocale;
+  return null;
+}
+
+/** Resolve a requested locale; falls back to default when missing/invalid for Stage 0 callers. */
+export function resolveLocale(requested, config = I18N) {
+  return matchEnabledLocale(requested, config) || getDefaultLocale(config);
 }
 
 /** HTML dir for a locale (he* → rtl, else ltr). */
 export function localeDir(locale) {
   const normalized = normalizeLocale(locale) || getDefaultLocale();
   return normalized === 'he' || normalized.startsWith('he-') ? 'rtl' : 'ltr';
+}
+
+/** Human label for a locale code (UI chrome / language switcher). */
+export function localeDisplayName(locale) {
+  const normalized = normalizeLocale(locale) || getDefaultLocale();
+  if (normalized === 'he' || normalized.startsWith('he-')) return 'עברית';
+  if (normalized === 'en' || normalized.startsWith('en-')) return 'English';
+  return normalized;
+}
+
+/**
+ * Build public URL path for a logical pagePath in a locale.
+ * Stage 0 (single locale): returns the logical path unchanged.
+ */
+export function localizePath(pagePath, locale, config = I18N) {
+  const validated = validateI18n(config);
+  const loc = matchEnabledLocale(locale, config) || validated.defaultLocale;
+  let path = pagePath || '/';
+  if (!path.startsWith('/')) path = `/${path}`;
+  if (path !== '/' && !path.endsWith('/')) path = `${path}/`;
+
+  if (!isMultilingual(config) || loc === validated.defaultLocale) return path;
+  if (path === '/') return `/${loc}/`;
+  return `/${loc}${path}`;
 }
 
 // Fail fast if template config is broken.
