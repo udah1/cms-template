@@ -28,6 +28,111 @@ git add .
 git commit -m "Initialize site from CMS template"
 ```
 
++## Prompt מוכן לסוכן
+
+אפשר להדביק את הפרומפט הבא לסוכן שמקבל את ה־Template:
+
+```text
+אתה אחראי להפוך את ה־CMS Template לפרויקט אמיתי ועצמאי עבור לקוח.
+
+קודם קרא במלואו את הקובץ:
+PROJECT-BOOTSTRAP.md
+
+עבוד רק לפי ההוראות שבו ולפי כללי הפרויקט. אל תניח שמשימה הושלמה רק משום שקיים קובץ או route; אמת כל דבר בקוד, ב־Git ובבדיקות.
+
+היעד:
+- ליצור repository עצמאי ונקי.
+- לחבר Cloudflare Pages, D1 ו־R2 ייעודיים לפרויקט.
+- להסיר כל תוכן, מדיה, URL, ID, credential או brand של פרויקט אחר.
+- להשלים תוכן, SEO, SSR, CMS, Preview, Publish, Rollback ו־Audit Log.
+- להשאיר את הפרויקט מוכן ל־Preview ולמסירה.
+
+לפני שינוי כלשהו:
+1. בדוק:
+   git status --short
+   git log --oneline -10
+   git diff --stat
+   git diff
+2. בדוק את מבנה הפרויקט, bindings, migrations, scripts, README ו־PROJECT-BOOTSTRAP.md.
+3. זהה אם סוכן אחר פעיל או אם שרת פיתוח/Database נמצאים בשימוש.
+4. אל תדרוס שינויים קיימים ואל תשתמש ב־reset או checkout הרסניים.
+
+כללי אבטחה:
+- אל תשמור סיסמאות, tokens, API keys או credentials ב־Git.
+- אל תשתמש ב־D1 או R2 של פרויקט אחר.
+- אל תריץ db:reset על Database משותף או מרוחק.
+- אל תריץ migration מרוחק בלי לוודא את ה־ID והסביבה.
+- אל תגדיר ALLOW_DEMO_REMOTE_SEED ב־CI או ב־Deploy.
+- אם נדרש seed מרוחק, עצור ואמת שזה Database חדש, ואז החלף מיד את סיסמת הדמו.
+- אל תבצע Deploy ל־Production בלי אישור מפורש.
+
+בצע את העבודה בשלבים:
+1. הקם repository חדש ללא היסטוריית Git של ה־Template.
+2. עדכן package.json, wrangler.toml, Pages project, D1, R2 ו־canonical origin.
+3. הרץ migration מקומי/מרוחק רק בסביבה הנכונה.
+4. הגדר תוכן, שירותים, תיק עבודות, אנשי קשר, SEO ומדיה דרך ה־CMS.
+5. אמת SSR בכל הנתיבים הציבוריים.
+6. אמת Draft → Preview → Publish → Rollback.
+7. אמת Login, Logout, Change Password, CSRF, rate limiting והעלאת מדיה.
+8. אמת Audit Log:
+   - כתיבת אירועים.
+   - actor, פעולה, entity, זמן ו־before/after.
+   - Publish ו־Rollback.
+   - API מוגן לקריאה.
+   - pagination וסינון.
+   - redaction של סיסמאות וטוקנים.
+   - אין DELETE ל־Audit Logs.
+   - UI לקריאה בלבד.
+9. חפש שאריות של הפרויקט המקורי: שמות, טלפונים, מיילים, URLs, מדיה, filenames ו־Cloudflare IDs.
+10. הרץ את בדיקות הקבלה רק מול סביבה מקומית מבודדת.
+
+בדיקות מינימליות:
+- node --check לכל JavaScript שהשתנה.
+- git diff --check.
+- npm run test:acceptance.
+- npm run test:ssr.
+- npm run test:audit.
+- בדיקות ידניות ל־Preview, Publish, Rollback, 404, SEO, מדיה ו־Admin.
+
+אם בדיקה משנה D1, ודא מראש שזה D1 מקומי ומבודד. אל תבצע בדיקה הרסנית על סביבה משותפת.
+
+בסיום אל תבצע commit אלא אם התבקש במפורש. דווח בפורמט הבא:
+
+מצב נוכחי:
+- Branch:
+- Commit אחרון:
+- שינויים לא מחויבים:
+- סוכן/שרת פעיל:
+
+הושלם:
+- רשימת משימות שאומתו בפועל.
+
+בדיקות:
+- מה הורץ ומה עבר.
+- מה לא הורץ ולמה.
+
+בעיות או חסמים:
+- חומרה.
+- קובץ ושורה.
+- הבעיה וההשפעה.
+- מה נדרש לתיקון.
+
+מסירה:
+- Repository:
+- Production URL:
+- Preview URL:
+- Pages project:
+- D1:
+- R2:
+- Last migration:
+- Audit Log:
+- Known limitations:
+- Rollback procedure:
+
+לעולם אל תדווח על הצלחה שלא אומתה. אל תכלול בדוח סיסמאות, tokens או credentials.
+```
+
+
 לא ממשיכים לפני שבודקים שה־repository החדש אינו מכיל היסטוריה או remote של פרויקט אחר.
 
 ## סדר עבודה מחייב
