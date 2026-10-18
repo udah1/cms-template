@@ -270,9 +270,34 @@ function initLocalesFromStorage() {
 
 const loginView = document.getElementById('loginView');
 const appView = document.getElementById('appView');
+const bootLoader = document.getElementById('bootLoader');
+const appLoader = document.getElementById('appLoader');
+const appLoaderText = document.getElementById('appLoaderText');
 const loginForm = document.getElementById('loginForm');
 const loginError = document.getElementById('loginError');
 const userEmail = document.getElementById('userEmail');
+let appLoadDepth = 0;
+
+function hideBootLoader() {
+  if (bootLoader) bootLoader.classList.add('hidden');
+}
+
+function setAppLoading(on) {
+  if (!appLoader) return;
+  if (on) {
+    appLoadDepth += 1;
+    if (appLoaderText) appLoaderText.textContent = tt('loading.data');
+    appLoader.hidden = false;
+    appLoader.classList.remove('hidden');
+    return;
+  }
+  appLoadDepth = Math.max(0, appLoadDepth - 1);
+  if (appLoadDepth === 0) {
+    appLoader.hidden = true;
+    appLoader.classList.add('hidden');
+  }
+}
+
 const contentFields = document.getElementById('contentFields');
 const servicesFields = document.getElementById('servicesFields');
 const portfolioList = document.getElementById('portfolioList');
@@ -603,57 +628,62 @@ function escapeAttr(str) {
 async function loadAdminData({ locale } = {}) {
   const loadLocale = resolveContentLocale(locale || contentLocale);
   const gen = ++contentLoadGen;
-  const [contentRes, portfolioRes] = await Promise.all([
-    api(withContentLocale('/api/admin/content', loadLocale)),
-    api(withContentLocale('/api/admin/portfolio', loadLocale)),
-  ]);
-  // Drop stale responses: newer load started, or user switched content locale.
-  if (gen !== contentLoadGen) return;
-  if (loadLocale !== contentLocale) return;
-  if (Array.isArray(contentRes.locales) && contentRes.locales.length) {
-    siteLocales = contentRes.locales.map((l) => String(l));
-  }
-  if (contentRes.defaultLocale) siteDefaultLocale = String(contentRes.defaultLocale);
-  if (!isMultilingualUi()) {
-    setAdminLocaleLocked(false);
-    contentLocale = siteDefaultLocale;
-    adminLocale = normalizeUiLocale(siteDefaultLocale);
-  } else {
-    contentLocale = resolveContentLocale(contentRes.locale || loadLocale || contentLocale);
-    if (!adminLocaleLocked) {
-      adminLocale = uiLocaleForContent(contentLocale);
-    } else {
-      adminLocale = readStoredLocale(STORAGE_ADMIN) || adminLocale;
+  setAppLoading(true);
+  try {
+    const [contentRes, portfolioRes] = await Promise.all([
+      api(withContentLocale('/api/admin/content', loadLocale)),
+      api(withContentLocale('/api/admin/portfolio', loadLocale)),
+    ]);
+    // Drop stale responses: newer load started, or user switched content locale.
+    if (gen !== contentLoadGen) return;
+    if (loadLocale !== contentLocale) return;
+    if (Array.isArray(contentRes.locales) && contentRes.locales.length) {
+      siteLocales = contentRes.locales.map((l) => String(l));
     }
-  }
-  writeStoredLocale(STORAGE_ADMIN, adminLocale);
-  writeStoredLocale(STORAGE_CONTENT, contentLocale);
-  applyChrome();
-  contentState = contentRes.content || {};
-  servicesState = contentRes.services || [];
-  portfolioState = portfolioRes.items || [];
-  sourceRevisions = {
-    ...(contentRes.sourceRevisions || {}),
-    ...(portfolioRes.sourceRevisions || {}),
-  };
-  needingAttention = Array.isArray(contentRes.needingAttention) ? contentRes.needingAttention : [];
-  categories = portfolioRes.categories || categories;
-  syncTranslationsUi();
-  const categoryHtml = categories
-    .map(
-      (c) =>
-        `<label class="check"><input type="checkbox" name="categories" value="${escapeAttr(c)}" /> ${escapeHtml(c)}</label>`
-    )
-    .join('');
-  itemCategories.innerHTML = categoryHtml;
-  if (bulkCategories) bulkCategories.innerHTML = categoryHtml;
-  renderContentFields();
-  renderServices();
-  renderPortfolio();
-  markContentClean();
-  saveBar.hidden = activeTab !== 'content';
-  if (!appView.classList.contains('hidden')) {
-    await refreshPublishStatus().catch(() => {});
+    if (contentRes.defaultLocale) siteDefaultLocale = String(contentRes.defaultLocale);
+    if (!isMultilingualUi()) {
+      setAdminLocaleLocked(false);
+      contentLocale = siteDefaultLocale;
+      adminLocale = normalizeUiLocale(siteDefaultLocale);
+    } else {
+      contentLocale = resolveContentLocale(contentRes.locale || loadLocale || contentLocale);
+      if (!adminLocaleLocked) {
+        adminLocale = uiLocaleForContent(contentLocale);
+      } else {
+        adminLocale = readStoredLocale(STORAGE_ADMIN) || adminLocale;
+      }
+    }
+    writeStoredLocale(STORAGE_ADMIN, adminLocale);
+    writeStoredLocale(STORAGE_CONTENT, contentLocale);
+    applyChrome();
+    contentState = contentRes.content || {};
+    servicesState = contentRes.services || [];
+    portfolioState = portfolioRes.items || [];
+    sourceRevisions = {
+      ...(contentRes.sourceRevisions || {}),
+      ...(portfolioRes.sourceRevisions || {}),
+    };
+    needingAttention = Array.isArray(contentRes.needingAttention) ? contentRes.needingAttention : [];
+    categories = portfolioRes.categories || categories;
+    syncTranslationsUi();
+    const categoryHtml = categories
+      .map(
+        (c) =>
+          `<label class="check"><input type="checkbox" name="categories" value="${escapeAttr(c)}" /> ${escapeHtml(c)}</label>`
+      )
+      .join('');
+    itemCategories.innerHTML = categoryHtml;
+    if (bulkCategories) bulkCategories.innerHTML = categoryHtml;
+    renderContentFields();
+    renderServices();
+    renderPortfolio();
+    markContentClean();
+    saveBar.hidden = activeTab !== 'content';
+    if (!appView.classList.contains('hidden')) {
+      await refreshPublishStatus().catch(() => {});
+    }
+  } finally {
+    setAppLoading(false);
   }
 }
 
@@ -800,6 +830,7 @@ async function pollUntilIdle() {
 }
 
 async function enterApp(email, { mustChangePassword = false } = {}) {
+  hideBootLoader();
   loginView.classList.add('hidden');
   appView.classList.remove('hidden');
   userEmail.textContent = email || '';
@@ -822,10 +853,12 @@ async function boot() {
     console.error(err);
   }
   initLocalesFromStorage();
+  applyChrome();
   try {
     const me = await api('/api/auth/me');
     await enterApp(me.email);
   } catch {
+    hideBootLoader();
     appView.classList.add('hidden');
     loginView.classList.remove('hidden');
   }
@@ -841,6 +874,7 @@ loginForm.addEventListener('submit', async (event) => {
       body: JSON.stringify({
         email: form.get('email'),
         password: form.get('password'),
+        rememberMe: form.get('remember') === 'on',
       }),
     });
     await enterApp(data.email, { mustChangePassword: !!data.mustChangePassword });
@@ -1487,17 +1521,21 @@ portfolioList.addEventListener('click', async (event) => {
     if (index < 0) return;
     const swapWith = btn.dataset.up ? index - 1 : index + 1;
     if (swapWith < 0 || swapWith >= portfolioState.length) return;
+    const next = portfolioState.slice();
+    [next[index], next[swapWith]] = [next[swapWith], next[index]];
+    portfolioState = next;
+    renderPortfolio();
     const ids = portfolioState.map((p) => p.id);
-    [ids[index], ids[swapWith]] = [ids[swapWith], ids[index]];
     const locale = contentLocale;
     try {
       await api(withContentLocale('/api/admin/portfolio/reorder', locale), {
         method: 'PUT',
         body: JSON.stringify({ ids, locale }),
       });
-      await loadAdminData({ locale });
+      refreshPublishStatus().catch(() => {});
     } catch (err) {
       showStatus(status, err.message, true);
+      await loadAdminData({ locale }).catch(() => {});
     }
   }
 });

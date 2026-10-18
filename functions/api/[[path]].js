@@ -9,6 +9,7 @@ import {
   readJson,
   requireUser,
   sessionCookie,
+  sessionDaysForRemember,
   verifyPassword,
 } from '../_shared/auth.js';
 import {
@@ -52,9 +53,9 @@ import { buildJsonLd, buildMeta, resolveSiteOrigin } from '../_shared/seo.js';
 import {
   acknowledgeTranslation,
   deleteTranslationTracking,
-  ensureAllTranslationStatusRows,
   ensureTranslationStatusRows,
   getSourceRevision,
+  getSourceRevisionsMap,
   hasTranslatedDiff,
   listNeedingAttention,
   listTranslationStatuses,
@@ -188,7 +189,9 @@ export async function onRequest(context) {
         return badRequest('אימייל או סיסמה שגויים', 401);
       }
       await clearLoginFailures(db, throttleKey);
-      const token = await createSession(db, user.id);
+      const rememberMe = body.rememberMe === true || body.remember === true;
+      const days = sessionDaysForRemember(rememberMe);
+      const { token, maxAgeSeconds } = await createSession(db, user.id, { days });
       // Seed demo password - never leave this on a live site after remote seed.
       const mustChangePassword = String(body.password) === 'ChangeMe123!';
       await logAudit(db, {
@@ -197,12 +200,12 @@ export async function onRequest(context) {
         entityType: 'auth',
         entityId: user.id,
         summary: 'התחברות הצליחה',
-        details: { email: user.email },
+        details: { email: user.email, rememberMe, sessionDays: days },
       });
       return json(
         { ok: true, email: user.email, mustChangePassword },
         200,
-        { 'Set-Cookie': sessionCookie(token, request) }
+        { 'Set-Cookie': sessionCookie(token, request, maxAgeSeconds) }
       );
     }
 
@@ -524,20 +527,21 @@ export async function onRequest(context) {
 
     if (route === 'admin/content' && method === 'GET') {
       const locale = requestLocale(request);
-      if (isMultilingual()) {
-        await ensureAllTranslationStatusRows(db);
-      }
+      // Do not call ensureAllTranslationStatusRows here - it is O(entities×locales)
+      // sequential D1 work and blocks the admin shell for tens of seconds.
       const content = await getContentMap(db, locale);
       const services = await getServices(db, { locale });
       const sourceRevisions = {};
       if (isMultilingual()) {
+        const [contentRevs, serviceRevs] = await Promise.all([
+          getSourceRevisionsMap(db, 'site_content'),
+          getSourceRevisionsMap(db, 'service'),
+        ]);
         for (const key of Object.keys(content)) {
-          sourceRevisions[`site_content:${key}`] =
-            (await getSourceRevision(db, 'site_content', key)) || 1;
+          sourceRevisions[`site_content:${key}`] = contentRevs[key] || 1;
         }
         for (const s of services) {
-          sourceRevisions[`service:${s.id}`] =
-            (await getSourceRevision(db, 'service', s.id)) || 1;
+          sourceRevisions[`service:${s.id}`] = serviceRevs[String(s.id)] || 1;
         }
       }
       return json({
@@ -859,9 +863,10 @@ export async function onRequest(context) {
       const items = await getPortfolio(db, { locale });
       const sourceRevisions = {};
       if (isMultilingual()) {
+        const portfolioRevs = await getSourceRevisionsMap(db, 'portfolio_item');
         for (const item of items) {
           sourceRevisions[`portfolio_item:${item.id}`] =
-            (await getSourceRevision(db, 'portfolio_item', item.id)) || 1;
+            portfolioRevs[String(item.id)] || 1;
         }
       }
       return json({

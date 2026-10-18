@@ -1,5 +1,10 @@
 const SESSION_COOKIE = 'cms_session';
 const SESSION_DAYS = 14;
+const SESSION_DAYS_REMEMBER = 365;
+
+export function sessionDaysForRemember(rememberMe) {
+  return rememberMe ? SESSION_DAYS_REMEMBER : SESSION_DAYS;
+}
 
 export function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), {
@@ -84,14 +89,15 @@ export function getSessionToken(request) {
   return parseCookies(request)[SESSION_COOKIE] || null;
 }
 
-export async function createSession(db, userId) {
+export async function createSession(db, userId, { days = SESSION_DAYS } = {}) {
+  const ttlDays = Number(days) > 0 ? Number(days) : SESSION_DAYS;
   const token = b64(crypto.getRandomValues(new Uint8Array(32))).replace(/[+/=]/g, '');
-  const expires = new Date(Date.now() + SESSION_DAYS * 86400 * 1000).toISOString();
+  const expires = new Date(Date.now() + ttlDays * 86400 * 1000).toISOString();
   await db
     .prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)')
     .bind(token, userId, expires)
     .run();
-  return token;
+  return { token, days: ttlDays, maxAgeSeconds: ttlDays * 86400 };
 }
 
 export async function destroySession(db, token) {

@@ -91,10 +91,12 @@ export function publicPayload(content, services, portfolio, { locale = getDefaul
 
 export async function snapshotFromDraft(db, locale = getDefaultLocale()) {
   const resolved = resolveLocale(locale);
-  const content = await getContentMap(db, resolved);
-  const systemMessages = await getSystemMessages(db, resolved);
-  const services = await getServices(db, { visibleOnly: true, locale: resolved });
-  const portfolio = await getPortfolio(db, { visibleOnly: true, locale: resolved });
+  const [content, systemMessages, services, portfolio] = await Promise.all([
+    getContentMap(db, resolved),
+    getSystemMessages(db, resolved),
+    getServices(db, { visibleOnly: true, locale: resolved }),
+    getPortfolio(db, { visibleOnly: true, locale: resolved }),
+  ]);
   return publicPayload(content, services, portfolio, { locale: resolved, systemMessages });
 }
 

@@ -80,6 +80,22 @@ export async function getSourceRevision(db, entityType, entityId, sourceLocale =
   return row ? Number(row.revision) : null;
 }
 
+/** One query for all revisions of an entity type (admin list/load hot path). */
+export async function getSourceRevisionsMap(db, entityType, sourceLocale = getDefaultLocale()) {
+  const { results } = await db
+    .prepare(
+      `SELECT entity_id, revision FROM translation_source_revisions
+       WHERE entity_type = ? AND source_locale = ?`
+    )
+    .bind(entityType, sourceLocale)
+    .all();
+  const map = {};
+  for (const row of results || []) {
+    map[String(row.entity_id)] = Number(row.revision) || 1;
+  }
+  return map;
+}
+
 async function ensureSourceRevisionRow(db, entityType, entityId, sourceLocale, initial = 1) {
   await db
     .prepare(
@@ -139,83 +155,112 @@ export async function ensureTranslationStatusRows(db, entityType, entityId, opts
   }
 }
 
-/** Backfill / sync status rows for all known entities and enabled locales. */
+/**
+ * Backfill / sync status rows for all known entities and enabled locales.
+ * Uses bulk SELECTs (not per-key N+1). Skip entirely when every entity already
+ * has a row for every enabled locale - safe for the translations panel only.
+ * Do NOT call this from admin content/portfolio GET hot paths.
+ */
 export async function ensureAllTranslationStatusRows(db) {
   const sourceLocale = getDefaultLocale();
   const locales = getLocales();
+  const localeCount = locales.length;
 
   const contentKeys = await db
     .prepare('SELECT DISTINCT key FROM site_content')
     .all()
-    .then((r) => (r.results || []).map((row) => row.key));
+    .then((r) => (r.results || []).map((row) => String(row.key)));
+  const msgKeys = await db
+    .prepare('SELECT DISTINCT key FROM system_messages')
+    .all()
+    .then((r) => (r.results || []).map((row) => String(row.key)));
+  const serviceIds = await db
+    .prepare('SELECT id FROM services')
+    .all()
+    .then((r) => (r.results || []).map((row) => String(row.id)));
+  const portfolioIds = await db
+    .prepare('SELECT id FROM portfolio_items')
+    .all()
+    .then((r) => (r.results || []).map((row) => String(row.id)));
+
+  const expectedEntities =
+    contentKeys.length + msgKeys.length + serviceIds.length + portfolioIds.length;
+  if (expectedEntities === 0) return;
+
+  const statusCount =
+    Number(
+      (
+        await db.prepare('SELECT COUNT(*) AS c FROM translation_status').first()
+      )?.c || 0
+    ) || 0;
+  if (statusCount >= expectedEntities * localeCount) return;
+
+  const contentPresent = await db
+    .prepare('SELECT key, locale FROM site_content')
+    .all()
+    .then((r) => r.results || []);
+  const contentByKey = {};
+  for (const row of contentPresent) {
+    const k = String(row.key);
+    if (!contentByKey[k]) contentByKey[k] = {};
+    contentByKey[k][row.locale] = true;
+  }
   for (const key of contentKeys) {
-    const present = {};
-    for (const loc of locales) {
-      const row = await db
-        .prepare('SELECT 1 AS ok FROM site_content WHERE key = ? AND locale = ?')
-        .bind(key, loc)
-        .first();
-      if (row) present[loc] = true;
-    }
+    const present = contentByKey[key] || {};
     await ensureTranslationStatusRows(db, 'site_content', key, {
       hasTranslation: present,
       sourceHasContent: !!present[sourceLocale],
     });
   }
 
-  const msgKeys = await db
-    .prepare('SELECT DISTINCT key FROM system_messages')
+  const msgPresent = await db
+    .prepare('SELECT key, locale FROM system_messages')
     .all()
-    .then((r) => (r.results || []).map((row) => row.key));
+    .then((r) => r.results || []);
+  const msgByKey = {};
+  for (const row of msgPresent) {
+    const k = String(row.key);
+    if (!msgByKey[k]) msgByKey[k] = {};
+    msgByKey[k][row.locale] = true;
+  }
   for (const key of msgKeys) {
-    const present = {};
-    for (const loc of locales) {
-      const row = await db
-        .prepare('SELECT 1 AS ok FROM system_messages WHERE key = ? AND locale = ?')
-        .bind(key, loc)
-        .first();
-      if (row) present[loc] = true;
-    }
+    const present = msgByKey[key] || {};
     await ensureTranslationStatusRows(db, 'system_message', key, {
       hasTranslation: present,
       sourceHasContent: !!present[sourceLocale],
     });
   }
 
-  const serviceIds = await db
-    .prepare('SELECT id FROM services')
+  const servicePresent = await db
+    .prepare('SELECT service_id, locale FROM service_translations')
     .all()
-    .then((r) => (r.results || []).map((row) => row.id));
+    .then((r) => r.results || []);
+  const serviceById = {};
+  for (const row of servicePresent) {
+    const id = String(row.service_id);
+    if (!serviceById[id]) serviceById[id] = {};
+    serviceById[id][row.locale] = true;
+  }
   for (const sid of serviceIds) {
-    const present = {};
-    for (const loc of locales) {
-      const row = await db
-        .prepare('SELECT 1 AS ok FROM service_translations WHERE service_id = ? AND locale = ?')
-        .bind(sid, loc)
-        .first();
-      if (row) present[loc] = true;
-    }
+    const present = serviceById[sid] || {};
     await ensureTranslationStatusRows(db, 'service', sid, {
       hasTranslation: present,
       sourceHasContent: !!present[sourceLocale],
     });
   }
 
-  const portfolioIds = await db
-    .prepare('SELECT id FROM portfolio_items')
+  const portfolioPresent = await db
+    .prepare('SELECT portfolio_item_id, locale FROM portfolio_item_translations')
     .all()
-    .then((r) => (r.results || []).map((row) => row.id));
+    .then((r) => r.results || []);
+  const portfolioById = {};
+  for (const row of portfolioPresent) {
+    const id = String(row.portfolio_item_id);
+    if (!portfolioById[id]) portfolioById[id] = {};
+    portfolioById[id][row.locale] = true;
+  }
   for (const pid of portfolioIds) {
-    const present = {};
-    for (const loc of locales) {
-      const row = await db
-        .prepare(
-          'SELECT 1 AS ok FROM portfolio_item_translations WHERE portfolio_item_id = ? AND locale = ?'
-        )
-        .bind(pid, loc)
-        .first();
-      if (row) present[loc] = true;
-    }
+    const present = portfolioById[pid] || {};
     await ensureTranslationStatusRows(db, 'portfolio_item', pid, {
       hasTranslation: present,
       sourceHasContent: !!present[sourceLocale],
@@ -1020,13 +1065,17 @@ function mapStatusRow(row, flags) {
 
 /**
  * List translation statuses. When monolingual: { multilingual: false, items: [] }.
+ * Pass ensure: false on hot paths (content/status GET) - backfill only from the
+ * translations panel (default ensure: true).
  */
 export async function listTranslationStatuses(db, query = {}) {
   if (!isMultilingual()) {
     return { multilingual: false, items: [], nextCursor: null, hasMore: false };
   }
 
-  await ensureAllTranslationStatusRows(db);
+  if (query.ensure !== false) {
+    await ensureAllTranslationStatusRows(db);
+  }
 
   const where = [];
   const binds = [];
@@ -1346,11 +1395,12 @@ export async function snapshotTranslatedDraft(db, locale) {
 }
 
 /** Collect needing-attention summaries for admin banner. */
-export async function listNeedingAttention(db, { limit = 50 } = {}) {
+export async function listNeedingAttention(db, { limit = 50, ensure = false } = {}) {
   if (!isMultilingual()) return [];
   const result = await listTranslationStatuses(db, {
     needingAttention: true,
     limit,
+    ensure,
   });
   return result.items.filter(
     (item) =>

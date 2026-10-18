@@ -19,6 +19,45 @@ body {
   font-family: var(--sans);
 }
 .hidden { display: none !important; }
+
+.page-loader {
+  min-height: 100dvh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 16px;
+  padding: 32px;
+  background:
+    radial-gradient(circle at top left, rgba(232, 213, 208, 0.9), transparent 45%),
+    var(--cream);
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+}
+.page-loader p {
+  margin: 0;
+  max-width: 20em;
+}
+.page-loader--overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  min-height: 0;
+  background: color-mix(in srgb, var(--cream) 88%, transparent);
+  backdrop-filter: blur(2px);
+}
+.page-loader__spin {
+  width: 36px;
+  height: 36px;
+  border: 2px solid var(--line);
+  border-top-color: var(--ink);
+  border-radius: 50%;
+  animation: page-loader-spin 0.7s linear infinite;
+}
+@keyframes page-loader-spin {
+  to { transform: rotate(360deg); }
+}
+
 .login-view {
   min-height: 100dvh;
   display: grid;
@@ -291,6 +330,12 @@ button.card-thumb:focus-visible {
   gap: 8px;
 }
 .check input { width: auto; }
+.login-remember {
+  margin: 2px 0 4px;
+  color: var(--ink);
+  font-size: 14px;
+  cursor: pointer;
+}
 dialog {
   border: 1px solid var(--line);
   padding: 0;

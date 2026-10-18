@@ -304,6 +304,7 @@ Rollback אינו מוחק מדיה מ־R2. מחיקת מדיה צריכה לה�
 
 - שפת המקור היא `I18N.defaultLocale` ב־`functions/_shared/i18n.js` - לא מקובעת ב־migration וב־seed.
 - `seed.sql` רק מנקה את טבלאות ה־translation; השורות נוצרות ב־runtime דרך `ensureAllTranslationStatusRows()` לפי `defaultLocale` / `locales`.
+- `ensureAllTranslationStatusRows` רץ מטאב **תרגומים** (ולא מ־`GET admin/content` / publish status) - אחרת האדמין נתקע בעשרות שניות על אתרים רב־לשוניים. `listNeedingAttention` בנתיבים החמים משתמש ב־`ensure: false`.
 - שמירת Draft בשפת מקור: **optimistic locking** - CAS bump + fan-out סטטוסים קודם, ורק אז כתיבת התוכן (`commitDraftWritesWithSourceBumps`). `expectedSourceRevision` ישן → 409 בלי לדרוס תוכן חדש יותר (לא last-write-wins).
 - UI תרגומים מופיע באדמין רק כש־`locales.length > 1`.
 - `system_messages`: נתמכים ב־payload ובמעקב freshness; מסך עריכה באדמין אינו חלק מ־v1 (chrome נשאר ב־`ui-i18n.js`).

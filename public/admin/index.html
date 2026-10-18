@@ -12,6 +12,11 @@
     <link rel="stylesheet" href="/admin/admin.css" />
   </head>
   <body>
+    <div id="bootLoader" class="page-loader" role="status" aria-live="polite">
+      <div class="page-loader__spin" aria-hidden="true"></div>
+      <p data-i18n="loading.boot">טוענים את לוח הניהול…</p>
+    </div>
+
     <section id="loginView" class="login-view hidden">
       <form id="loginForm" class="login-card">
         <img src="/assets/brand-logo.png" data-i18n-alt="login.logoAlt" alt="לוגו העסק" width="64" height="64" />
@@ -19,12 +24,20 @@
         <p data-i18n="login.subtitle">שם העסק</p>
         <label><span data-i18n="login.email">אימייל</span><input name="email" type="email" autocomplete="username" required /></label>
         <label><span data-i18n="login.password">סיסמה</span><input name="password" type="password" autocomplete="current-password" required /></label>
+        <label class="check login-remember">
+          <input name="remember" type="checkbox" />
+          <span data-i18n="login.remember">זכור אותי לשנה</span>
+        </label>
         <p id="loginError" class="error" hidden></p>
         <button type="submit" class="btn" data-i18n="login.submit">התחברות</button>
       </form>
     </section>
 
     <div id="appView" class="app hidden">
+      <div id="appLoader" class="page-loader page-loader--overlay hidden" role="status" aria-live="polite" hidden>
+        <div class="page-loader__spin" aria-hidden="true"></div>
+        <p id="appLoaderText" data-i18n="loading.data">טוענים נתונים…</p>
+      </div>
       <header class="admin-header">
         <div>
           <strong data-i18n="header.brand">ניהול</strong>
