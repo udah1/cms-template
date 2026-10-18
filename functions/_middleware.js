@@ -188,7 +188,8 @@ export async function onRequest(context) {
     }
 
     const versionId = published.versionId;
-    const versionCacheReq = new Request(cacheKey(origin, path, versionId));
+    const locale = published.locale || 'he';
+    const versionCacheReq = new Request(cacheKey(origin, path, versionId, locale));
     const cached = await readCache(versionCacheReq);
     if (cached) {
       return cached;

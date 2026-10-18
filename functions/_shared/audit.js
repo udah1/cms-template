@@ -19,6 +19,7 @@ export async function logAudit(db, opts) {
     action,
     entityType,
     entityId = null,
+    locale = null,
     summary,
     details = null,
     success = true,
@@ -40,14 +41,15 @@ export async function logAudit(db, opts) {
     await db
       .prepare(
         `INSERT INTO audit_log
-          (actor_user_id, action, entity_type, entity_id, summary, details_json, success)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+          (actor_user_id, action, entity_type, entity_id, locale, summary, details_json, success)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         actorUserId == null ? null : Number(actorUserId),
         String(action),
         String(entityType),
         entityId == null || entityId === '' ? null : String(entityId),
+        locale == null || locale === '' ? null : String(locale),
         String(summary).slice(0, 500),
         detailsJson,
         success ? 1 : 0
@@ -155,7 +157,7 @@ export async function listAuditLogs(db, query = {}) {
   }
 
   const sql = `
-    SELECT a.id, a.actor_user_id, a.action, a.entity_type, a.entity_id,
+    SELECT a.id, a.actor_user_id, a.action, a.entity_type, a.entity_id, a.locale,
            a.summary, a.details_json, a.success, a.created_at,
            u.email AS actor_email
     FROM audit_log a
@@ -177,6 +179,7 @@ export async function listAuditLogs(db, query = {}) {
     action: row.action,
     entityType: row.entity_type,
     entityId: row.entity_id ?? null,
+    locale: row.locale ?? null,
     summary: row.summary,
     details: parseDetailsJson(row.details_json),
     success: !!row.success,

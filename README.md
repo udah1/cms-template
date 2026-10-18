@@ -77,4 +77,16 @@ npm run test:acceptance
 
 ## שדות תוכן גנריים
 
-`business_name`, `hero_title`, `hero_description`, `about_body`, `contact_phone`, `contact_email`, `seo_title`, `seo_description`, `og_image` - ועוד שדות תומכים הניתנים לעריכה באדמין. שירותים נשמרים בטבלת `services` (`title` / `description`).
+`business_name`, `hero_title`, `hero_description`, `about_body`, `contact_phone`, `contact_email`, `seo_title`, `seo_description`, `og_image` - ועוד שדות תומכים הניתנים לעריכה באדמין. שירותים נשמרים ב־`services` + `service_translations` (מודל locale-ready).
+
+## Locale-ready (Stage 0)
+
+ה־Template מוכן לריבוי שפות גם כשיש שפה אחת בלבד:
+
+- קונפיג: `functions/_shared/i18n.js` (`defaultLocale: 'he'`, `locales: ['he']`).
+- `multilingual` / `enabled` נגזרים מ־`locales.length > 1` ואינם נשמרים ידנית.
+- תוכן, תרגומי ישויות, `site_versions` ו־`site_publish_state` כוללים `locale`.
+- במצב חד־לשוני אין language switcher, prefix או `hreflang`.
+- להוספת שפה שנייה: ראו [CMS-MULTILINGUAL-PROMPT.md](CMS-MULTILINGUAL-PROMPT.md).
+
+אחרי שינוי סכמה מקומי, אם `db:reset` נכשל על טבלאות ישנות, מחקו את מצב D1 המקומי (`.wrangler/state`) והריצו שוב `npm run db:reset`.

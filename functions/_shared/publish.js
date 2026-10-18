@@ -4,6 +4,7 @@ import {
   restoreDraftFromPayload,
   snapshotFromDraft,
 } from './content.js';
+import { getDefaultLocale, resolveLocale } from './i18n.js';
 import { buildSeoArtifacts } from './seo.js';
 
 function randomToken() {
@@ -13,31 +14,36 @@ function randomToken() {
   return btoa(s).replace(/[+/=]/g, '');
 }
 
-export async function ensurePublishState(db) {
+export async function ensurePublishState(db, locale = getDefaultLocale()) {
+  const resolved = resolveLocale(locale);
   await db
     .prepare(
-      `INSERT OR IGNORE INTO site_publish_state (id, published_version_id, previous_version_id, publishing)
-       VALUES (1, NULL, NULL, 0)`
+      `INSERT OR IGNORE INTO site_publish_state (locale, published_version_id, previous_version_id, publishing)
+       VALUES (?, NULL, NULL, 0)`
     )
+    .bind(resolved)
     .run();
+  return resolved;
 }
 
-export async function ensurePublishedBaseline(db, siteOrigin, userId = null) {
-  await ensurePublishState(db);
+export async function ensurePublishedBaseline(db, siteOrigin, userId = null, locale = getDefaultLocale()) {
+  const resolved = await ensurePublishState(db, locale);
   const state = await db
-    .prepare('SELECT published_version_id FROM site_publish_state WHERE id = 1')
+    .prepare('SELECT published_version_id FROM site_publish_state WHERE locale = ?')
+    .bind(resolved)
     .first();
   if (state?.published_version_id) return state.published_version_id;
 
-  const payload = await snapshotFromDraft(db);
+  const payload = await snapshotFromDraft(db, resolved);
   const seo = buildSeoArtifacts(payload, siteOrigin);
   const insert = await db
     .prepare(
       `INSERT INTO site_versions
-        (created_by, status, payload_json, sitemap_xml, json_ld, meta_json, error_message)
-       VALUES (?, 'published', ?, ?, ?, ?, '')`
+        (locale, created_by, status, payload_json, sitemap_xml, json_ld, meta_json, error_message)
+       VALUES (?, ?, 'published', ?, ?, ?, ?, '')`
     )
     .bind(
+      resolved,
       userId,
       JSON.stringify(payload),
       seo.sitemap_xml,
@@ -50,42 +56,51 @@ export async function ensurePublishedBaseline(db, siteOrigin, userId = null) {
     .prepare(
       `UPDATE site_publish_state
        SET published_version_id = ?, previous_version_id = NULL, publishing = 0, updated_at = datetime('now')
-       WHERE id = 1`
+       WHERE locale = ?`
     )
-    .bind(versionId)
+    .bind(versionId, resolved)
     .run();
   return versionId;
 }
 
-async function claimPublishLock(db) {
+async function claimPublishLock(db, locale) {
   const result = await db
     .prepare(
       `UPDATE site_publish_state
        SET publishing = 1, updated_at = datetime('now')
-       WHERE id = 1 AND publishing = 0`
+       WHERE locale = ? AND publishing = 0`
     )
+    .bind(locale)
     .run();
   return (result.meta?.changes || 0) > 0;
 }
 
-async function releasePublishLock(db) {
+async function releasePublishLock(db, locale) {
   await db
     .prepare(
       `UPDATE site_publish_state
        SET publishing = 0, updated_at = datetime('now')
-       WHERE id = 1`
+       WHERE locale = ?`
     )
+    .bind(locale)
     .run();
 }
 
 /**
- * @param {{ db: any, userId: number|null, siteOrigin: string, forceFail?: boolean, payloadOverride?: object }} opts
+ * @param {{ db: any, userId: number|null, siteOrigin: string, forceFail?: boolean, payloadOverride?: object, locale?: string }} opts
  */
 export async function publishFromDraft(opts) {
-  const { db, userId, siteOrigin, forceFail = false, payloadOverride = null } = opts;
-  await ensurePublishState(db);
+  const {
+    db,
+    userId,
+    siteOrigin,
+    forceFail = false,
+    payloadOverride = null,
+    locale = getDefaultLocale(),
+  } = opts;
+  const resolved = await ensurePublishState(db, locale);
 
-  const locked = await claimPublishLock(db);
+  const locked = await claimPublishLock(db, resolved);
   if (!locked) {
     const err = new Error('פרסום כבר בתהליך');
     err.status = 409;
@@ -95,20 +110,23 @@ export async function publishFromDraft(opts) {
   let versionId = null;
   try {
     const state = await db
-      .prepare('SELECT published_version_id, previous_version_id FROM site_publish_state WHERE id = 1')
+      .prepare('SELECT published_version_id, previous_version_id FROM site_publish_state WHERE locale = ?')
+      .bind(resolved)
       .first();
     const currentId = state?.published_version_id || null;
 
-    const payload = payloadOverride || (await snapshotFromDraft(db));
+    const payload = payloadOverride || (await snapshotFromDraft(db, resolved));
+    if (!payload.locale) payload.locale = resolved;
     const seo = buildSeoArtifacts(payload, siteOrigin);
 
     const insert = await db
       .prepare(
         `INSERT INTO site_versions
-          (created_by, status, payload_json, sitemap_xml, json_ld, meta_json, error_message)
-         VALUES (?, 'publishing', ?, ?, ?, ?, '')`
+          (locale, created_by, status, payload_json, sitemap_xml, json_ld, meta_json, error_message)
+         VALUES (?, ?, 'publishing', ?, ?, ?, ?, '')`
       )
       .bind(
+        resolved,
         userId,
         JSON.stringify(payload),
         seo.sitemap_xml,
@@ -124,8 +142,10 @@ export async function publishFromDraft(opts) {
 
     if (currentId) {
       await db
-        .prepare(`UPDATE site_versions SET status = 'superseded' WHERE id = ? AND status = 'published'`)
-        .bind(currentId)
+        .prepare(
+          `UPDATE site_versions SET status = 'superseded' WHERE id = ? AND status = 'published' AND locale = ?`
+        )
+        .bind(currentId, resolved)
         .run();
     }
 
@@ -141,12 +161,12 @@ export async function publishFromDraft(opts) {
              previous_version_id = ?,
              publishing = 0,
              updated_at = datetime('now')
-         WHERE id = 1`
+         WHERE locale = ?`
       )
-      .bind(versionId, currentId)
+      .bind(versionId, currentId, resolved)
       .run();
 
-    return { versionId, previousVersionId: currentId, status: 'published' };
+    return { versionId, previousVersionId: currentId, status: 'published', locale: resolved };
   } catch (err) {
     if (versionId) {
       await db
@@ -156,7 +176,7 @@ export async function publishFromDraft(opts) {
         .bind(String(err.message || 'שגיאה').slice(0, 500), versionId)
         .run();
     }
-    await releasePublishLock(db);
+    await releasePublishLock(db, resolved);
     const out = new Error(err.message || 'פרסום נכשל');
     out.status = err.status || 500;
     out.versionId = versionId;
@@ -164,10 +184,13 @@ export async function publishFromDraft(opts) {
   }
 }
 
-export async function rollbackToPrevious(db, userId, siteOrigin) {
-  await ensurePublishState(db);
+export async function rollbackToPrevious(db, userId, siteOrigin, locale = getDefaultLocale()) {
+  const resolved = await ensurePublishState(db, locale);
   const state = await db
-    .prepare('SELECT published_version_id, previous_version_id, publishing FROM site_publish_state WHERE id = 1')
+    .prepare(
+      'SELECT published_version_id, previous_version_id, publishing FROM site_publish_state WHERE locale = ?'
+    )
+    .bind(resolved)
     .first();
   if (state?.publishing) {
     const err = new Error('פרסום כבר בתהליך');
@@ -181,7 +204,7 @@ export async function rollbackToPrevious(db, userId, siteOrigin) {
   }
 
   const prev = await db
-    .prepare(`SELECT id, payload_json, status FROM site_versions WHERE id = ?`)
+    .prepare(`SELECT id, locale, payload_json, status FROM site_versions WHERE id = ?`)
     .bind(state.previous_version_id)
     .first();
   if (!prev?.payload_json) {
@@ -198,10 +221,11 @@ export async function rollbackToPrevious(db, userId, siteOrigin) {
     err.status = 500;
     throw err;
   }
+  if (!payload.locale) payload.locale = prev.locale || resolved;
 
-  // Restore draft workspace to match previous published content (media URLs kept as-is).
+  // Restore draft workspace for this locale only (media URLs kept as-is).
   await restoreDraftFromPayload(db, payload);
-  return publishFromDraft({ db, userId, siteOrigin, payloadOverride: payload });
+  return publishFromDraft({ db, userId, siteOrigin, payloadOverride: payload, locale: resolved });
 }
 
 function stableSort(value) {
@@ -218,20 +242,23 @@ function stableSort(value) {
 
 function fingerprintPayload(payload) {
   const slice = {
+    locale: payload?.locale || getDefaultLocale(),
     content: payload?.content || {},
+    systemMessages: payload?.systemMessages || {},
     services: Array.isArray(payload?.services) ? payload.services : [],
     portfolio: Array.isArray(payload?.portfolio) ? payload.portfolio : [],
   };
   return JSON.stringify(stableSort(slice));
 }
 
-export async function getPublishStatus(db) {
-  await ensurePublishState(db);
+export async function getPublishStatus(db, locale = getDefaultLocale()) {
+  const resolved = await ensurePublishState(db, locale);
   const state = await db
     .prepare(
-      `SELECT published_version_id, previous_version_id, publishing, updated_at
-       FROM site_publish_state WHERE id = 1`
+      `SELECT locale, published_version_id, previous_version_id, publishing, updated_at
+       FROM site_publish_state WHERE locale = ?`
     )
+    .bind(resolved)
     .first();
 
   let published = null;
@@ -241,7 +268,9 @@ export async function getPublishStatus(db) {
 
   if (state?.published_version_id) {
     published = await db
-      .prepare(`SELECT id, created_at, status, error_message, payload_json FROM site_versions WHERE id = ?`)
+      .prepare(
+        `SELECT id, locale, created_at, status, error_message, payload_json FROM site_versions WHERE id = ?`
+      )
       .bind(state.published_version_id)
       .first();
     if (published?.payload_json) {
@@ -254,41 +283,44 @@ export async function getPublishStatus(db) {
   }
   if (state?.previous_version_id) {
     previous = await db
-      .prepare(`SELECT id, created_at, status, error_message FROM site_versions WHERE id = ?`)
+      .prepare(`SELECT id, locale, created_at, status, error_message FROM site_versions WHERE id = ?`)
       .bind(state.previous_version_id)
       .first();
   }
 
   lastFailed = await db
     .prepare(
-      `SELECT id, created_at, status, error_message FROM site_versions
-       WHERE status = 'failed' ORDER BY id DESC LIMIT 1`
+      `SELECT id, locale, created_at, status, error_message FROM site_versions
+       WHERE status = 'failed' AND locale = ? ORDER BY id DESC LIMIT 1`
     )
+    .bind(resolved)
     .first();
 
   let statusLabel = 'Published';
   if (state?.publishing) statusLabel = 'Publishing';
   else if (lastFailed && published && lastFailed.id > published.id) statusLabel = 'Failed';
 
-  const draftPayload = await snapshotFromDraft(db);
+  const draftPayload = await snapshotFromDraft(db, resolved);
   const hasUnpublishedChanges =
     !publishedPayload || fingerprintPayload(draftPayload) !== fingerprintPayload(publishedPayload);
 
   return {
+    locale: resolved,
     publishing: !!state?.publishing,
     status: statusLabel,
     hasUnpublishedChanges,
     publishedVersion: published
-      ? { id: published.id, createdAt: published.created_at, status: published.status }
+      ? { id: published.id, createdAt: published.created_at, status: published.status, locale: published.locale }
       : null,
     previousVersion: previous
-      ? { id: previous.id, createdAt: previous.created_at, status: previous.status }
+      ? { id: previous.id, createdAt: previous.created_at, status: previous.status, locale: previous.locale }
       : null,
     lastFailed: lastFailed
       ? {
           id: lastFailed.id,
           createdAt: lastFailed.created_at,
           error: lastFailed.error_message,
+          locale: lastFailed.locale,
         }
       : null,
     updatedAt: state?.updated_at || null,
@@ -321,8 +353,8 @@ export async function validatePreviewToken(db, token) {
   return row;
 }
 
-export async function getDraftPublicPayload(db) {
-  return snapshotFromDraft(db);
+export async function getDraftPublicPayload(db, locale = getDefaultLocale()) {
+  return snapshotFromDraft(db, locale);
 }
 
 export { getAdminDraftPayload, getPublishedRow };

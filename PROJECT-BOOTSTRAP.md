@@ -10,6 +10,29 @@
 - לא משתמשים ב־Database, Bucket, דומיין, מדיה או credentials של פרויקט אחר.
 - אין להריץ `db:reset` מול Database משותף או מרוחק.
 
+## שלב 0 — החלטות שפה לפני המימוש
+
+כל פרויקט חדש מתחיל כ־locale-ready, גם אם הוא חד־לשוני:
+
+- `defaultLocale` הוא שפת התוכן הראשית.
+- `locales` מתחיל עם `[defaultLocale]` בלבד.
+- `multilingual` ו־`enabled` נגזרים מ־`locales.length > 1` ואינם ערכים ידניים.
+- במצב חד־לשוני אין language switcher, prefix או `hreflang`.
+- slugs באנגלית הם ברירת המחדל, אלא אם הלקוח ביקש במפורש slugs מקומיים.
+
+בתחילת כל פרויקט הסוכן חייב לשאול ולתעד במפורש:
+
+1. אילו שפות הפרויקט צריך לתמוך בהן עכשיו ומהם ה־locales המדויקים?
+2. מהו `defaultLocale` בפועל?
+3. האם שפות נוספות הן חלק מההשקה הראשונה או שלב עתידי?
+4. האם הפרויקט דורש חריגה מברירת המחדל של slugs באנגלית?
+5. אילו שדות נחשבים חובה לפרסום בכל ישות?
+6. האם תוכן עשיר דורש HTML מוגבל, Markdown או טקסט פשוט?
+7. האם יש צורך ב־Admin roles מעבר למשתמש Admin יחיד?
+8. האם יש עמוד landing מיוחד עבור `x-default`, או שהוא מצביע תמיד ל־default locale?
+
+אם אין תשובה אחרת, יש להתחיל עם שפה אחת בלבד — שפת ברירת המחדל — ולהפעיל את פרומפט multilingual רק לאחר אישור מפורש להוספת שפה שנייה.
+
 ## הקמת repository חדש
 
 ```bash
@@ -28,7 +51,7 @@ git add .
 git commit -m "Initialize site from CMS template"
 ```
 
-+## Prompt מוכן לסוכן
+## Prompt מוכן לסוכן
 
 אפשר להדביק את הפרומפט הבא לסוכן שמקבל את ה־Template:
 
@@ -56,6 +79,19 @@ PROJECT-BOOTSTRAP.md
 2. בדוק את מבנה הפרויקט, bindings, migrations, scripts, README ו־PROJECT-BOOTSTRAP.md.
 3. זהה אם סוכן אחר פעיל או אם שרת פיתוח/Database נמצאים בשימוש.
 4. אל תדרוס שינויים קיימים ואל תשתמש ב־reset או checkout הרסניים.
+
+ב־Project Kickoff תעד את תשובות השפה לפני יצירת התוכן:
+- `defaultLocale`:
+- `locales`:
+- שפות נוספות בהשקה או בעתיד:
+- multilingual בהשקה: כן/לא
+- slugs מקומיים: כן/לא
+- שדות חובה לפרסום:
+- פורמט תוכן עשיר: plain text / Markdown / HTML מוגבל
+- Admin roles נוספים: כן/לא
+- `x-default`: default locale / landing נפרד
+
+אם `locales` מכיל יותר משפה אחת, קרא והפעל גם את `CMS-MULTILINGUAL-PROMPT.md`. אם יש רק locale אחד, אל תפעיל את פרומפט multilingual ואל תוסיף UI, prefix או `hreflang`.
 
 כללי אבטחה:
 - אל תשמור סיסמאות, tokens, API keys או credentials ב־Git.

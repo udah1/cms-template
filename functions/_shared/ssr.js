@@ -383,8 +383,8 @@ export function buildFallbackHtml(template) {
   return markSsr(template, false);
 }
 
-export function cacheKey(origin, path, versionId) {
-  return `https://ssr.cache.local/ssr:${origin}:${path}:v${versionId || '0'}`;
+export function cacheKey(origin, path, versionId, locale = 'he') {
+  return `https://ssr.cache.local/ssr:${origin}:${path}:v${versionId || '0'}:l${locale || 'he'}`;
 }
 
 export function fallbackCacheKey(origin, path) {

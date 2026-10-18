@@ -95,7 +95,7 @@ export function buildJsonLd(payload, siteOrigin) {
         '@id': websiteId,
         name: business,
         url: origin,
-        inLanguage: 'he',
+        inLanguage: payload?.locale || 'he',
         publisher: { '@id': businessId },
       },
     ],

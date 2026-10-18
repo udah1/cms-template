@@ -182,7 +182,7 @@ async function main() {
   // Concurrent lock
   const { execSync } = await import('node:child_process');
   execSync(
-    'npx wrangler d1 execute cms-template --local --persist-to=.wrangler/state --command "UPDATE site_publish_state SET publishing = 1 WHERE id = 1"',
+    'npx wrangler d1 execute cms-template --local --persist-to=.wrangler/state --command "UPDATE site_publish_state SET publishing = 1 WHERE locale = \'he\'"',
     { stdio: 'pipe' }
   );
   const locked = await req('/api/admin/publish', { method: 'POST', origin: true, body: {} });
@@ -196,7 +196,7 @@ async function main() {
     fail(10, JSON.stringify(statusBusy.data));
   }
   execSync(
-    'npx wrangler d1 execute cms-template --local --persist-to=.wrangler/state --command "UPDATE site_publish_state SET publishing = 0 WHERE id = 1"',
+    'npx wrangler d1 execute cms-template --local --persist-to=.wrangler/state --command "UPDATE site_publish_state SET publishing = 0 WHERE locale = \'he\'"',
     { stdio: 'pipe' }
   );
 

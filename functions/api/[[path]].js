@@ -22,6 +22,7 @@ import {
   serviceRowForAudit,
 } from '../_shared/audit.js';
 import { getContentMap, getPortfolio, getPublishedPayload, getServices } from '../_shared/content.js';
+import { getDefaultLocale } from '../_shared/i18n.js';
 import { PORTFOLIO_CATEGORIES, categoriesToDb } from '../_shared/categories.js';
 import { assertSameOrigin } from '../_shared/csrf.js';
 import {
@@ -344,10 +345,12 @@ export async function onRequest(context) {
           action: 'publish.succeeded',
           entityType: 'version',
           entityId: result.versionId,
+          locale: result.locale || getDefaultLocale(),
           summary: 'פרסום הצליח',
           details: {
             versionId: result.versionId,
             previousVersionId: result.previousVersionId ?? null,
+            locale: result.locale || getDefaultLocale(),
           },
         });
         return json({ ok: true, ...result, status: 'Published' });
@@ -358,11 +361,13 @@ export async function onRequest(context) {
           action: 'publish.failed',
           entityType: 'version',
           entityId: err.versionId || null,
+          locale: getDefaultLocale(),
           summary: 'פרסום נכשל',
           details: {
             error: String(err.message || 'פרסום נכשל').slice(0, 500),
             versionId: err.versionId || null,
             conflict: status === 409,
+            locale: getDefaultLocale(),
           },
           success: false,
         });
@@ -387,10 +392,12 @@ export async function onRequest(context) {
           action: 'rollback.succeeded',
           entityType: 'version',
           entityId: result.versionId,
+          locale: result.locale || getDefaultLocale(),
           summary: 'שחזור לגרסה קודמת הצליח',
           details: {
             versionId: result.versionId,
             previousVersionId: result.previousVersionId ?? null,
+            locale: result.locale || getDefaultLocale(),
           },
         });
         return json({ ok: true, ...result, status: 'Published' });
@@ -401,11 +408,13 @@ export async function onRequest(context) {
           action: 'rollback.failed',
           entityType: 'version',
           entityId: err.versionId || null,
+          locale: getDefaultLocale(),
           summary: 'שחזור לגרסה קודמת נכשל',
           details: {
             error: String(err.message || 'שחזור נכשל').slice(0, 500),
             versionId: err.versionId || null,
             conflict: status === 409,
+            locale: getDefaultLocale(),
           },
           success: false,
         });
@@ -438,13 +447,14 @@ export async function onRequest(context) {
       const beforeById = new Map(beforeServices.map((s) => [Number(s.id), s]));
 
       if (body.content && typeof body.content === 'object') {
+        const locale = getDefaultLocale();
         const stmts = Object.entries(body.content).map(([key, value]) =>
           db
             .prepare(
-              `INSERT INTO site_content (key, value) VALUES (?, ?)
-               ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+              `INSERT INTO site_content (key, locale, value) VALUES (?, ?, ?)
+               ON CONFLICT(key, locale) DO UPDATE SET value = excluded.value`
             )
-            .bind(key, String(value ?? ''))
+            .bind(key, locale, String(value ?? ''))
         );
         if (stmts.length) await db.batch(stmts);
       }
@@ -462,13 +472,19 @@ export async function onRequest(context) {
             visible: s.visible ? 1 : 0,
           };
           const diffs = prev ? diffService(prev, next) : null;
+          const locale = getDefaultLocale();
+          await db
+            .prepare(`UPDATE services SET sort_order = ?, visible = ? WHERE id = ?`)
+            .bind(next.sort_order, next.visible, id)
+            .run();
           await db
             .prepare(
-              `UPDATE services
-               SET title = ?, description = ?, sort_order = ?, visible = ?
-               WHERE id = ?`
+              `INSERT INTO service_translations (service_id, locale, title, description)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(service_id, locale) DO UPDATE SET
+                 title = excluded.title, description = excluded.description`
             )
-            .bind(next.title, next.description, next.sort_order, next.visible, id)
+            .bind(id, locale, next.title, next.description)
             .run();
           if (hasDiffs(diffs)) {
             serviceChanges.push({ id, diffs });
@@ -489,6 +505,7 @@ export async function onRequest(context) {
             action: 'content.update',
             entityType: 'content',
             entityId: null,
+            locale: getDefaultLocale(),
             summary: `עודכנו ${changedKeys.length} שדות תוכן`,
             details: { fields: contentDiffs },
           });
@@ -502,6 +519,7 @@ export async function onRequest(context) {
           action: 'service.update',
           entityType: 'service',
           entityId: change.id,
+          locale: getDefaultLocale(),
           summary: `שירות #${change.id} עודכן`,
           details: { fields: change.diffs, changedFields },
         });
@@ -521,19 +539,25 @@ export async function onRequest(context) {
       const title = String(body?.title || 'שירות חדש');
       const description = String(body?.description || '');
       const sortOrder = (max?.m || 0) + 1;
+      const locale = getDefaultLocale();
       const result = await db
-        .prepare(
-          `INSERT INTO services (title, description, sort_order, visible)
-           VALUES (?, ?, ?, ?)`
-        )
-        .bind(title, description, sortOrder, 1)
+        .prepare(`INSERT INTO services (sort_order, visible) VALUES (?, ?)`)
+        .bind(sortOrder, 1)
         .run();
       const id = result.meta.last_row_id;
+      await db
+        .prepare(
+          `INSERT INTO service_translations (service_id, locale, title, description)
+           VALUES (?, ?, ?, ?)`
+        )
+        .bind(id, locale, title, description)
+        .run();
       await logAudit(db, {
         actorUserId: user.id,
         action: 'service.create',
         entityType: 'service',
         entityId: id,
+        locale,
         summary: `שירות חדש נוצר (#${id})`,
         details: serviceRowForAudit({ title, description, sort_order: sortOrder, visible: 1 }),
       });
@@ -548,13 +572,15 @@ export async function onRequest(context) {
       if ((countRow?.c || 0) <= 1) {
         return badRequest('חייבים להשאיר לפחות שירות אחד');
       }
-      const existing = await db.prepare('SELECT * FROM services WHERE id = ?').bind(id).first();
+      const services = await getServices(db);
+      const existing = services.find((s) => Number(s.id) === id) || null;
       await db.prepare('DELETE FROM services WHERE id = ?').bind(id).run();
       await logAudit(db, {
         actorUserId: user.id,
         action: 'service.delete',
         entityType: 'service',
         entityId: id,
+        locale: getDefaultLocale(),
         summary: `שירות #${id} נמחק`,
         details: { before: serviceRowForAudit(existing) },
       });
@@ -588,31 +614,37 @@ export async function onRequest(context) {
         visible: body.visible === false ? 0 : 1,
         featured: body.featured ? 1 : 0,
       };
+      const locale = getDefaultLocale();
       const result = await db
         .prepare(
           `INSERT INTO portfolio_items
-            (title, category, categories, media_type, media_url, cover_url, alt_text, sort_order, visible, featured)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            (media_type, media_url, cover_url, sort_order, visible, featured)
+           VALUES (?, ?, ?, ?, ?, ?)`
         )
         .bind(
-          row.title,
-          row.category,
-          row.categories,
           row.media_type,
           row.media_url,
           row.cover_url,
-          row.alt_text,
           row.sort_order,
           row.visible,
           row.featured
         )
         .run();
       const id = result.meta.last_row_id;
+      await db
+        .prepare(
+          `INSERT INTO portfolio_item_translations
+            (portfolio_item_id, locale, title, category, categories, alt_text)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        )
+        .bind(id, locale, row.title, row.category, row.categories, row.alt_text)
+        .run();
       await logAudit(db, {
         actorUserId: user.id,
         action: 'portfolio.create',
         entityType: 'portfolio',
         entityId: id,
+        locale,
         summary: `פריט תיק עבודות נוצר (#${id})`,
         details: {
           after: portfolioRowForAudit(row),
@@ -648,10 +680,12 @@ export async function onRequest(context) {
       if (!id) return badRequest('מזהה לא תקין');
       const body = await readJson(request);
       if (!body) return badRequest('גוף בקשה לא תקין');
-      const existing = await db.prepare('SELECT * FROM portfolio_items WHERE id = ?').bind(id).first();
+      const items = await getPortfolio(db);
+      const existing = items.find((p) => Number(p.id) === id) || null;
       if (!existing) return badRequest('פריט לא נמצא', 404);
       const { category, categories } = categoriesToDb(body.categories || body.category);
       const mediaType = body.media_type === 'video' ? 'video' : 'image';
+      const locale = getDefaultLocale();
       const next = {
         title: String(body.title || ''),
         category,
@@ -667,23 +701,32 @@ export async function onRequest(context) {
       await db
         .prepare(
           `UPDATE portfolio_items SET
-            title = ?, category = ?, categories = ?, media_type = ?, media_url = ?, cover_url = ?,
-            alt_text = ?, sort_order = ?, visible = ?, featured = ?
+            media_type = ?, media_url = ?, cover_url = ?,
+            sort_order = ?, visible = ?, featured = ?
            WHERE id = ?`
         )
         .bind(
-          next.title,
-          next.category,
-          next.categories,
           next.media_type,
           next.media_url,
           next.cover_url,
-          next.alt_text,
           next.sort_order,
           next.visible,
           next.featured,
           id
         )
+        .run();
+      await db
+        .prepare(
+          `INSERT INTO portfolio_item_translations
+            (portfolio_item_id, locale, title, category, categories, alt_text)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(portfolio_item_id, locale) DO UPDATE SET
+             title = excluded.title,
+             category = excluded.category,
+             categories = excluded.categories,
+             alt_text = excluded.alt_text`
+        )
+        .bind(id, locale, next.title, next.category, next.categories, next.alt_text)
         .run();
 
       const deletedMedia = [];
@@ -712,6 +755,7 @@ export async function onRequest(context) {
           action: 'portfolio.update',
           entityType: 'portfolio',
           entityId: id,
+          locale,
           summary: `פריט תיק עבודות #${id} עודכן`,
           details: {
             fields,
@@ -728,7 +772,8 @@ export async function onRequest(context) {
       requireCsrf(request);
       const id = Number(parts[2]);
       if (!id) return badRequest('מזהה לא תקין');
-      const existing = await db.prepare('SELECT * FROM portfolio_items WHERE id = ?').bind(id).first();
+      const items = await getPortfolio(db);
+      const existing = items.find((p) => Number(p.id) === id) || null;
       await db.prepare('DELETE FROM portfolio_items WHERE id = ?').bind(id).run();
       if (env.MEDIA && existing) {
         await deletePortfolioMedia(env.MEDIA, existing);
@@ -744,6 +789,7 @@ export async function onRequest(context) {
         action: 'portfolio.delete',
         entityType: 'portfolio',
         entityId: id,
+        locale: getDefaultLocale(),
         summary: `פריט תיק עבודות #${id} נמחק`,
         details: { before: portfolioRowForAudit(existing) },
       });
