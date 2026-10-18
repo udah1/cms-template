@@ -343,11 +343,14 @@ function markSsr(html, preview) {
 function pageTitle(meta, content, pagePath) {
   const business = content.business_name || 'שם העסק';
   const base = meta.title || business;
+  // Brand | page - same order as admin document title.
   if (pagePath === '/') {
-    return base.includes(business) ? base : `${base} | ${business}`;
+    if (base === business) return business;
+    if (base.includes(business)) return base;
+    return `${business} | ${base}`;
   }
   if (pagePath === '/404' || pagePath === '/404/') {
-    return `העמוד לא נמצא | ${business}`;
+    return `${business} | העמוד לא נמצא`;
   }
   const labels = {
     '/about/': 'אודות',
@@ -361,7 +364,7 @@ function pageTitle(meta, content, pagePath) {
   if (base.includes(business) || base.includes('שם העסק')) {
     return base.replaceAll('שם העסק', business);
   }
-  return `${label} | ${business}`;
+  return `${business} | ${label}`;
 }
 
 /**

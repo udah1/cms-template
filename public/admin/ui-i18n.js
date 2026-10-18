@@ -55,7 +55,7 @@ export const FIELD_LABELS = {
 
 export const UI_STRINGS = {
   he: {
-    'doc.title': 'ניהול | {name}',
+    'doc.title': '{name} | ניהול',
     'login.heading': 'ניהול האתר',
     'login.subtitle': '{name}',
     'login.email': 'אימייל',
@@ -273,7 +273,7 @@ export const UI_STRINGS = {
     'ph.bulkTitle': 'למשל: פרויקט לדוגמה 1',
   },
   en: {
-    'doc.title': 'Admin | {name}',
+    'doc.title': '{name} | Admin',
     'login.heading': 'Site admin',
     'login.subtitle': '{name}',
     'login.email': 'Email',

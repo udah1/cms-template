@@ -493,7 +493,7 @@ function applySeo(data) {
   }
   if (meta.title && !lockTitle && isHome) {
     const business = (data?.content && data.content.business_name) || 'שם העסק';
-    document.title = meta.title.includes(business) ? meta.title : `${meta.title} | ${business}`;
+    document.title = meta.title.includes(business) ? meta.title : `${business} | ${meta.title}`;
   }
 
   // Keep page-specific FAQ JSON-LD on /faq/; refresh business graph elsewhere.

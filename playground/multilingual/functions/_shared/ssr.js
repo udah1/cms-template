@@ -457,11 +457,14 @@ function markSsr(html, preview) {
 function pageTitle(meta, content, pagePath, locale = getDefaultLocale()) {
   const business = content.business_name || (locale === 'en' ? 'Business name' : 'שם העסק');
   const base = meta.title || business;
+  // Brand | page - same order as admin document title.
   if (pagePath === '/') {
-    return base.includes(business) ? base : `${base} | ${business}`;
+    if (base === business) return business;
+    if (base.includes(business)) return base;
+    return `${business} | ${base}`;
   }
   if (pagePath === '/404' || pagePath === '/404/') {
-    return locale === 'en' ? `Page not found | ${business}` : `העמוד לא נמצא | ${business}`;
+    return locale === 'en' ? `${business} | Page not found` : `${business} | העמוד לא נמצא`;
   }
   const labelsHe = {
     '/about/': 'אודות',
@@ -481,7 +484,7 @@ function pageTitle(meta, content, pagePath, locale = getDefaultLocale()) {
   if (base.includes(business) || base.includes('שם העסק') || base.includes('Business name')) {
     return base.replaceAll('שם העסק', business).replaceAll('Business name', business);
   }
-  return `${label} | ${business}`;
+  return `${business} | ${label}`;
 }
 
 function setHtmlLangDir(html, locale) {

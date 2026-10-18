@@ -149,7 +149,7 @@ async function main() {
   });
   brandRoot.querySelector = (sel) => (sel === 'title' ? titleEl : null);
   applyAdminChrome('he', { root: brandRoot, businessName: 'MYK Studio' });
-  if (titleEl.textContent === 'ניהול | MYK Studio' && subtitleEl.textContent === 'MYK Studio') {
+  if (titleEl.textContent === 'MYK Studio | ניהול' && subtitleEl.textContent === 'MYK Studio') {
     pass(31, 'applyAdminChrome interpolates business name into title/subtitle');
   } else {
     fail(31, `brand chrome unexpected title=${titleEl.textContent} sub=${subtitleEl.textContent}`);
