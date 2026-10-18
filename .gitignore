@@ -1,0 +1,31 @@
+# Local secrets - never commit
+*.local
+*.local.*
+.env
+.env.*
+!.env.example
+.dev.vars
+*credentials*
+*secrets*
+admin-credentials*
+
+# Wrangler / local state
+.wrangler/
+node_modules/
+
+# Optional local media copy for R2 re-sync only
+storage/media/**
+!storage/media/
+!storage/media/.gitkeep
+!storage/media/images/
+!storage/media/images/.gitkeep
+!storage/media/videos/
+!storage/media/videos/.gitkeep
+!storage/README.md
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo

@@ -1,0 +1,15 @@
+name = "cms-template"
+compatibility_date = "2025-10-01"
+pages_build_output_dir = "public"
+
+# Replace placeholders after creating D1 / R2 resources in your Cloudflare account.
+[[d1_databases]]
+binding = "DB"
+database_name = "cms-template"
+database_id = "00000000-0000-0000-0000-000000000000"
+preview_database_id = "00000000-0000-0000-0000-000000000000"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "cms-template-media"
+preview_bucket_name = "cms-template-media"

@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ניהול | שם העסק</title>
+    <meta name="robots" content="noindex, nofollow, noarchive" />
+    <link rel="icon" href="/assets/brand-logo.png" type="image/png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/admin/admin.css" />
+  </head>
+  <body>
+    <section id="loginView" class="login-view hidden">
+      <form id="loginForm" class="login-card">
+        <img src="/assets/brand-logo.png" alt="לוגו העסק" width="64" height="64" />
+        <h1>ניהול האתר</h1>
+        <p>שם העסק</p>
+        <label>אימייל<input name="email" type="email" autocomplete="username" required /></label>
+        <label>סיסמה<input name="password" type="password" autocomplete="current-password" required /></label>
+        <p id="loginError" class="error" hidden></p>
+        <button type="submit" class="btn">התחברות</button>
+      </form>
+    </section>
+
+    <div id="appView" class="app hidden">
+      <header class="admin-header">
+        <div>
+          <strong>ניהול</strong>
+          <span id="userEmail"></span>
+        </div>
+        <nav class="tabs" aria-label="ניווט ניהול">
+          <button type="button" class="tab active" data-tab="content">תוכן</button>
+          <button type="button" class="tab" data-tab="portfolio">תיק עבודות</button>
+          <button type="button" class="tab" data-tab="password">סיסמה</button>
+        </nav>
+        <button type="button" id="logoutBtn" class="btn btn-ghost">יציאה</button>
+      </header>
+
+      <section class="publish-strip" id="publishStrip" aria-label="פרסום">
+        <div class="publish-meta">
+          <p id="publishVersionLabel" class="publish-version">גרסה מפורסמת: —</p>
+          <p id="publishStatusLabel" class="publish-status">פורסם</p>
+        </div>
+        <div class="publish-actions">
+          <button type="button" id="previewBtn" class="btn btn-ghost">תצוגה מקדימה</button>
+          <button type="button" id="publishBtn" class="btn">פרסום</button>
+          <button type="button" id="rollbackBtn" class="btn btn-ghost" disabled>שחזור</button>
+        </div>
+        <p id="publishMessage" class="status" hidden></p>
+      </section>
+
+      <main>
+        <section id="tab-content" class="panel">
+          <div class="panel-head">
+            <h2>תוכן האתר</h2>
+          </div>
+          <p id="contentStatus" class="status" hidden></p>
+          <div class="form-grid" id="contentFields"></div>
+          <div class="panel-head services-head">
+            <h3>שירותים</h3>
+            <button type="button" id="addServiceBtn" class="btn btn-ghost">שירות חדש</button>
+          </div>
+          <p class="meta services-hint">עד 10 שירותים, לפחות אחד. עריכת טקסט ו“מוצג” נשמרים בכפתור למטה.</p>
+          <div id="servicesFields" class="stack"></div>
+        </section>
+
+        <section id="tab-portfolio" class="panel hidden">
+          <div class="panel-head">
+            <h2>תיק עבודות</h2>
+            <div class="panel-head-actions">
+              <button type="button" id="bulkImagesBtn" class="btn btn-ghost">העלאת כמה תמונות</button>
+              <button type="button" id="addItemBtn" class="btn">פריט חדש</button>
+            </div>
+          </div>
+          <p class="meta">העלאה מרובה לתמונות בלבד - כל קובץ הופך לפריט נפרד. סרטונים: פריט חדש, אחד בכל פעם.</p>
+          <p id="portfolioStatus" class="status" hidden></p>
+          <div id="portfolioList" class="stack"></div>
+        </section>
+
+        <section id="tab-password" class="panel hidden">
+          <div class="panel-head"><h2>שינוי סיסמה</h2></div>
+          <form id="passwordForm" class="narrow-form">
+            <label>סיסמה נוכחית<input name="currentPassword" type="password" autocomplete="current-password" required /></label>
+            <label>סיסמה חדשה<input name="newPassword" type="password" autocomplete="new-password" required minlength="8" /></label>
+            <label>אימות סיסמה חדשה<input name="confirmPassword" type="password" autocomplete="new-password" required minlength="8" /></label>
+            <p id="passwordStatus" class="status" hidden></p>
+            <button type="submit" class="btn">עדכון סיסמה</button>
+          </form>
+        </section>
+      </main>
+
+      <div id="saveBar" class="save-bar">
+        <span id="saveBarHint">אין שינויים לשמירה</span>
+        <button type="button" id="saveContentBtn" class="btn" disabled>שמירת שינויים</button>
+      </div>
+    </div>
+
+    <dialog id="itemDialog">
+      <form method="dialog" id="itemForm" class="dialog-form">
+        <h3 id="itemDialogTitle">פריט בתיק עבודות</h3>
+        <input type="hidden" name="id" />
+        <label>כותרת<input name="title" required /></label>
+        <fieldset class="category-fieldset">
+          <legend>קטגוריות</legend>
+          <div id="itemCategories" class="category-checks"></div>
+          <p class="meta">אפשר לבחור יותר מאחת</p>
+        </fieldset>
+        <label id="mediaTypeField" hidden>סוג מדיה
+          <select name="media_type" id="mediaTypeSelect">
+            <option value="image">תמונה</option>
+            <option value="video">סרטון</option>
+          </select>
+        </label>
+        <p id="mediaTypeHint" class="meta">סוג המדיה נקבע אוטומטית מהקובץ שתעלי.</p>
+
+        <fieldset class="source-fieldset">
+          <legend>מדיה</legend>
+          <div class="source-radios" role="radiogroup" aria-label="מקור מדיה">
+            <label class="check"><input type="radio" name="media_source" value="upload" checked /> העלאה</label>
+            <label class="check"><input type="radio" name="media_source" value="url" /> קישור</label>
+          </div>
+          <div id="mediaUploadPanel">
+            <input type="file" id="mediaFile" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" />
+          </div>
+          <div id="mediaUrlPanel" hidden>
+            <label class="nested-label">כתובת מדיה
+              <input name="media_url" placeholder="https://… או /media/…" />
+            </label>
+          </div>
+          <p id="mediaCurrentHint" class="meta" hidden></p>
+          <p id="mediaUploadStatus" class="meta" hidden></p>
+        </fieldset>
+
+        <fieldset class="source-fieldset" id="coverFieldset" hidden>
+          <legend>קאבר לסרטון (אופציונלי)</legend>
+          <p class="meta">בהעלאת סרטון נוצר קאבר אוטומטי. אפשר להחליף בהעלאה או בקישור.</p>
+          <div class="source-radios" role="radiogroup" aria-label="מקור קאבר">
+            <label class="check"><input type="radio" name="cover_source" value="upload" checked /> העלאה</label>
+            <label class="check"><input type="radio" name="cover_source" value="url" /> קישור</label>
+          </div>
+          <div id="coverUploadPanel">
+            <input type="file" id="coverFile" accept="image/jpeg,image/png,image/webp,image/gif" />
+          </div>
+          <div id="coverUrlPanel" hidden>
+            <label class="nested-label">כתובת קאבר
+              <input name="cover_url" placeholder="https://… או /media/…" />
+            </label>
+          </div>
+          <p id="coverCurrentHint" class="meta" hidden></p>
+        </fieldset>
+        <label>טקסט חלופי
+          <input name="alt_text" placeholder="למשל: תיאור קצר של התמונה" />
+        </label>
+        <p class="meta">תיאור קצר של התמונה או הסרטון - לנגישות (קורא מסך) ולחיפוש. לא מוצג על התמונה עצמה.</p>
+        <label class="check"><input name="visible" type="checkbox" checked /> מוצג באתר</label>
+        <p class="meta">אם מסומן - הפריט יופיע בתיק העבודות למבקרים. בלי סימון הוא נשמר אצלך אבל מוסתר מהאתר.</p>
+        <label class="check"><input name="featured" type="checkbox" /> מוצג בדף הבית</label>
+        <p class="meta">אם מסומן (וגם מוצג באתר) - הפריט יופיע גם בגלריה הקצרה בדף הבית. בלי סימון הוא רק בתיק העבודות המלא.</p>
+        <p id="itemError" class="error" hidden></p>
+        <div class="dialog-actions">
+          <button type="submit" class="btn" value="save">שמירה</button>
+          <button type="button" class="btn btn-ghost" id="cancelItemBtn">ביטול</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="bulkDialog">
+      <form method="dialog" id="bulkForm" class="dialog-form">
+        <h3>העלאת כמה תמונות</h3>
+        <p class="meta">בוחרים הגדרות פעם אחת, ואז כמה קבצי תמונה. כל קובץ יהפוך לפריט נפרד.</p>
+        <label>כותרת בסיס
+          <input name="title" required placeholder="למשל: פרויקט לדוגמה 1" />
+        </label>
+        <p class="meta">יתווסף מספר אוטומטית: פרויקט לדוגמה 1 1, פרויקט לדוגמה 1 2…</p>
+        <fieldset class="category-fieldset">
+          <legend>קטגוריות</legend>
+          <div id="bulkCategories" class="category-checks"></div>
+          <p class="meta">אפשר לבחור יותר מאחת</p>
+        </fieldset>
+        <label>תמונות
+          <input type="file" id="bulkImagesInput" accept="image/jpeg,image/png,image/webp,image/gif" multiple required />
+        </label>
+        <p id="bulkFilesHint" class="meta" hidden></p>
+        <label>טקסט חלופי בסיס
+          <input name="alt_text" placeholder="למשל: תיאור קצר של התמונה" />
+        </label>
+        <p class="meta">יתווסף מספר אוטומטית לכל תמונה. אפשר להשאיר ריק.</p>
+        <label class="check"><input name="visible" type="checkbox" checked /> מוצג באתר</label>
+        <p class="meta">אם מסומן - הפריטים יופיעו בתיק העבודות למבקרים.</p>
+        <label class="check"><input name="featured" type="checkbox" /> מוצג בדף הבית</label>
+        <p class="meta">אם מסומן - כל התמונות בבחירה יופיעו גם בגלריה בדף הבית.</p>
+        <p id="bulkError" class="error" hidden></p>
+        <p id="bulkStatus" class="meta" hidden></p>
+        <div class="dialog-actions">
+          <button type="submit" class="btn" id="bulkSubmitBtn">העלאה ושמירה</button>
+          <button type="button" class="btn btn-ghost" id="cancelBulkBtn">ביטול</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="confirmDialog">
+      <div class="dialog-form confirm-form">
+        <h3 id="confirmTitle">אישור מחיקה</h3>
+        <p id="confirmMessage">למחוק?</p>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-danger" id="confirmOkBtn">מחיקה</button>
+          <button type="button" class="btn btn-ghost" id="confirmCancelBtn">ביטול</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="previewDialog" class="preview-dialog">
+      <div class="preview-dialog-inner">
+        <div class="preview-dialog-head">
+          <h3 id="previewDialogTitle">תצוגה מקדימה</h3>
+          <button type="button" class="btn btn-ghost" id="previewCloseBtn">סגירה</button>
+        </div>
+        <div id="previewDialogBody" class="preview-dialog-body"></div>
+      </div>
+    </dialog>
+
+    <script src="/admin/admin.js" type="module"></script>
+  </body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "name": "cms-template",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Generic site + admin CMS template on Cloudflare Pages, D1, and R2",
+  "scripts": {
+    "dev": "wrangler pages dev public --persist-to=.wrangler/state --ip 127.0.0.1 --port 8788 --show-interactive-dev-session=false",
+    "db:migrate": "wrangler d1 execute cms-template --local --persist-to=.wrangler/state --file=./schema.sql",
+    "db:seed": "wrangler d1 execute cms-template --local --persist-to=.wrangler/state --file=./seed.sql",
+    "db:reset": "npm run db:migrate && npm run db:seed",
+    "db:migrate:remote": "wrangler d1 execute cms-template --remote --file=./schema.sql",
+    "db:seed:remote": "wrangler d1 execute cms-template --remote --file=./seed.sql",
+    "deploy": "wrangler pages deploy public --project-name=cms-template --branch=main",
+    "r2:create": "wrangler r2 bucket create cms-template-media",
+    "r2:sync": "bash scripts/sync-media-to-r2.sh",
+    "test:acceptance": "node scripts/acceptance-publish.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.40.0"
+  }
+}
