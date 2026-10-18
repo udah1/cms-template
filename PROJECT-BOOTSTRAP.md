@@ -359,7 +359,7 @@ Audit Log נמצא ב־`migrations/004_audit_log.sql` ומשולב גם ב־`sch
 
 ## Admin UX (חובה ב־Template)
 
-- **טאבים ב־URL:** הטאב הפעיל מסונכרן ל־`location.hash` (`#content`, `#portfolio`, `#audit`, …). רענון ואחורה/קדימה בדפדפן משחזרים את הטאב. טאב `translations` מוסתר כשאין ריבוי שפות; כפיית `#password` נשארת כשסיסמת הדמו בתוקף.
+- **טאבים ב־URL:** הטאב הפעיל מסונכרן ל־`location.hash` (`#content`, `#portfolio`, `#audit`, …). רענון ואחורה/קדימה בדפדפן משחזרים את הטאב. ב־`enterApp` יש לצבוע את הטאב מה־hash **לפני** `await loadAdminData()` כדי שלא יהבהב `#content`. טאבים עם טעינה אסינכרונית (תרגומים / פניות / היסטוריה) מציגים ספינר על ה־panel (`is-loading`). טאב `translations` מוסתר כשאין ריבוי שפות; כפיית `#password` נשארת כשסיסמת הדמו בתוקף.
 - **Audit UI:** מפתחות הפעולה/הישות ב־API נשארים טכניים; ב־UI מציגים תוויות ידידותיות מ־`ui-i18n` (עברית ואנגלית). אין להציג למשתמש מחרוזות כמו `publish.succeeded` כתווית ראשית.
 - **זמנים ביומן:** `created_at` נשמר ב־UTC ב־DB; בתצוגת Admin מציגים לפי שעון הדפדפן של הקליינט (`Intl` / `toLocaleString`, כמו בפניות). אין להציג את מחרוזת ה־UTC הגולמית כתווית ראשית.
 - **קוד/JSON:** אלמנטים `pre` / `code` / `.audit-diff` תמיד `direction: ltr` (גם כש־`html[dir=rtl]`), כדי שבלוקי JSON לא יישברו.

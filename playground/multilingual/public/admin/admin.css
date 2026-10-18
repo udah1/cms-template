@@ -58,6 +58,35 @@ body {
   to { transform: rotate(360deg); }
 }
 
+.panel {
+  position: relative;
+}
+.panel.is-loading {
+  min-height: 10rem;
+  pointer-events: none;
+}
+.panel.is-loading::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: color-mix(in srgb, var(--cream, #f7f5f2) 82%, transparent);
+}
+.panel.is-loading::after {
+  content: '';
+  position: absolute;
+  top: min(40%, 8rem);
+  left: 50%;
+  z-index: 6;
+  width: 32px;
+  height: 32px;
+  margin: -16px;
+  border: 2px solid var(--line, #d8d2c8);
+  border-top-color: var(--ink, #1c1917);
+  border-radius: 50%;
+  animation: page-loader-spin 0.7s linear infinite;
+}
+
 .login-view {
   min-height: 100dvh;
   display: grid;

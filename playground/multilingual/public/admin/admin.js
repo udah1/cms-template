@@ -203,8 +203,10 @@ async function loadTranslationsPanel() {
   const list = document.getElementById('translationsList');
   if (!isMultilingualUi()) {
     if (list) list.innerHTML = '';
+    setPanelLoading('translations', false);
     return;
   }
+  setPanelLoading('translations', true);
   try {
     const data = await api('/api/admin/translations/status?needing_attention=1&limit=100');
     const items = data.items || [];
@@ -256,6 +258,8 @@ async function loadTranslationsPanel() {
       .join('');
   } catch (err) {
     if (status) showStatus(status, err.message || tt('translations.loadFailed'), true);
+  } finally {
+    setPanelLoading('translations', false);
   }
 }
 
@@ -457,43 +461,76 @@ function markContentClean() {
   updateSaveBar();
 }
 
-function switchTab(name, { fromUrl = false, replaceHash = false } = {}) {
-  const tab = resolveAdminTab(name);
-  const same = tab === activeTab;
+const ASYNC_LOAD_TABS = new Set(['translations', 'audit']);
+
+/** Paint tab chrome immediately (no network). Used to avoid flashing #content on refresh. */
+function paintTabUi(tab) {
   activeTab = tab;
   document.querySelectorAll('.tab').forEach((el) => {
     el.classList.toggle('active', el.dataset.tab === tab);
   });
   document.querySelectorAll('.panel').forEach((panel) => {
-    panel.classList.toggle('hidden', panel.id !== `tab-${tab}`);
+    const active = panel.id === `tab-${tab}`;
+    panel.classList.toggle('hidden', !active);
+    // Keep spinner on the active async tab across bootstrap; clear others.
+    if (!active) {
+      panel.classList.remove('is-loading');
+      panel.removeAttribute('aria-busy');
+    }
   });
   saveBar.hidden = tab !== 'content';
-  if (!same) {
-    if (tab === 'audit') {
-      loadAuditLog({ reset: true }).catch((err) => {
-        const status = document.getElementById('auditStatus');
-        if (status) showStatus(status, err.message || tt('audit.loadFailed'), true);
-      });
-    }
-    if (tab === 'translations') {
-      loadTranslationsPanel().catch(() => {});
-    }
+}
+
+function setPanelLoading(tab, on) {
+  const panel = document.getElementById(`tab-${tab}`);
+  if (!panel) return;
+  panel.classList.toggle('is-loading', !!on);
+  panel.setAttribute('aria-busy', on ? 'true' : 'false');
+}
+
+function loadActiveTabData() {
+  if (activeTab === 'audit') {
+    loadAuditLog({ reset: true }).catch((err) => {
+      const status = document.getElementById('auditStatus');
+      if (status) showStatus(status, err.message || tt('audit.loadFailed'), true);
+    });
   }
+  if (activeTab === 'translations') {
+    loadTranslationsPanel().catch(() => {});
+  }
+}
+
+function switchTab(name, { fromUrl = false, replaceHash = false, loadData = true } = {}) {
+  const tab = resolveAdminTab(name);
+  const same = tab === activeTab;
+  paintTabUi(tab);
+  if (loadData && !same) loadActiveTabData();
   if (!fromUrl || location.hash !== `#${tab}`) {
     syncTabHash(tab, { replace: fromUrl || replaceHash });
   }
 }
 
-function applyTabFromUrl() {
+function applyTabFromUrl({ loadData = true } = {}) {
   if (appView.classList.contains('hidden')) return;
   const requested = parseTabFromHash();
   const tab = resolveAdminTab(requested || 'content');
   applyingTabFromUrl = true;
   try {
-    switchTab(tab, { fromUrl: true });
+    switchTab(tab, { fromUrl: true, loadData });
   } finally {
     applyingTabFromUrl = false;
   }
+}
+
+/** Show hash tab immediately, before locales/content finish loading. */
+function paintTabFromHashEarly() {
+  const requested = parseTabFromHash();
+  if (!requested) return;
+  const known = knownAdminTabs();
+  if (!known.includes(requested)) return;
+  // Keep #translations visible even before siteLocales load; resolve later.
+  paintTabUi(requested);
+  if (ASYNC_LOAD_TABS.has(requested)) setPanelLoading(requested, true);
 }
 
 /** Attention only on the locale that needs work - never on the source locale. */
@@ -883,6 +920,13 @@ async function enterApp(email, { mustChangePassword = false } = {}) {
   loginView.classList.add('hidden');
   appView.classList.remove('hidden');
   userEmail.textContent = email || '';
+  // Paint the hash tab before await so refresh does not flash #content first.
+  if (mustChangePassword) {
+    paintTabUi('password');
+    syncTabHash('password', { replace: true });
+  } else {
+    paintTabFromHashEarly();
+  }
   await loadAdminData();
   try {
     await refreshPublishStatus();
@@ -890,10 +934,15 @@ async function enterApp(email, { mustChangePassword = false } = {}) {
     showStatus(publishMessage, err.message, true);
   }
   if (mustChangePassword) {
-    switchTab('password', { replaceHash: true });
+    switchTab('password', { replaceHash: true, loadData: false });
     showStatus(document.getElementById('passwordStatus'), tt('password.demoWarning'), true);
   } else {
-    applyTabFromUrl();
+    const requested = parseTabFromHash();
+    const tab = resolveAdminTab(requested || activeTab || 'content');
+    paintTabUi(tab);
+    syncTabHash(tab, { replace: true });
+    // Early paint skipped network; load async tabs after admin bootstrap.
+    loadActiveTabData();
   }
 }
 
@@ -1886,6 +1935,7 @@ async function loadAuditLog({ reset = false, append = false } = {}) {
   const status = document.getElementById('auditStatus');
   const moreBtn = document.getElementById('auditMoreBtn');
   auditLoading = true;
+  if (!append) setPanelLoading('audit', true);
   try {
     if (status) status.hidden = true;
     const params = auditFilterParams();
@@ -1900,6 +1950,7 @@ async function loadAuditLog({ reset = false, append = false } = {}) {
     throw err;
   } finally {
     auditLoading = false;
+    if (!append) setPanelLoading('audit', false);
   }
 }
 
